@@ -1,0 +1,44 @@
+name: iJIRA
+options:
+  bundleIdPrefix: de.entrecode
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    PRODUCT_BUNDLE_IDENTIFIER: de.entrecode.iJIRA
+    # Echtes Team-Signing → stabile Identität (Erlaubnis & Keychain überleben
+    # Rebuilds). Build mit `-allowProvisioningUpdates`, Apple-ID des Teams muss
+    # in Xcode eingeloggt sein.
+    DEVELOPMENT_TEAM: 4W7DMXPNC2
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+
+targets:
+  iJIRA:
+    type: application
+    platform: macOS
+    sources:
+      - path: iJIRA
+    info:
+      path: iJIRA/Info.plist
+      properties:
+        # Menüleisten-Agent: kein Dock-Icon, kein Hauptfenster beim Start
+        LSUIElement: true
+        CFBundleDisplayName: iJIRA
+        CFBundleName: iJIRA
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSHumanReadableCopyright: ""
+        # Damit App Transport Security nur HTTPS erlaubt (Default ist ohnehin streng)
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+    settings:
+      base:
+        PRODUCT_NAME: iJIRA
+        GENERATE_INFOPLIST_FILE: NO

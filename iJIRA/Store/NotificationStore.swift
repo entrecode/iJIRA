@@ -20,14 +20,43 @@ final class NotificationStore {
 
     init() {
         let schema = Schema([JiraNotification.self, SyncCursor.self])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        // Expliziter Store-Pfad in einem eigenen Unterverzeichnis. Ohne URL
+        // landet SwiftData bei "~/Library/Application Support/default.store" —
+        // ein Pfad, den sich ALLE SwiftData-Apps ohne eigene Konfiguration
+        // teilen. Eine fremde App hat dort unsere Tabellen weggerissen
+        // ("no such table: ZSYNCCURSOR"), wodurch im laufenden Betrieb alle
+        // Inhalte verschwanden und der Sync tot war, bis die App neu startete.
+        let storeURL = Self.storeURL()
         do {
-            container = try ModelContainer(for: schema, configurations: [config])
+            container = try ModelContainer(
+                for: schema,
+                configurations: [ModelConfiguration(schema: schema, url: storeURL)])
         } catch {
-            // Fallback auf In-Memory, damit die App nie am Store scheitert.
-            let memory = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-            container = try! ModelContainer(for: schema, configurations: [memory])
+            // Store kaputt/inkompatibel: Datei entfernen und frisch anlegen —
+            // der Sync baut die letzten 7 Tage ohnehin wieder auf.
+            let fm = FileManager.default
+            for suffix in ["", "-shm", "-wal"] {
+                try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + suffix))
+            }
+            do {
+                container = try ModelContainer(
+                    for: schema,
+                    configurations: [ModelConfiguration(schema: schema, url: storeURL)])
+            } catch {
+                // Letzte Rettung: In-Memory, damit die App nie am Store scheitert.
+                let memory = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                container = try! ModelContainer(for: schema, configurations: [memory])
+            }
         }
+    }
+
+    /// `~/Library/Application Support/iJIRA/iJIRA.store` — exklusiv für diese App.
+    private static func storeURL() -> URL {
+        let fm = FileManager.default
+        let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("iJIRA", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("iJIRA.store")
     }
 
     // MARK: - Cursors

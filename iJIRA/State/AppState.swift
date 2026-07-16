@@ -17,6 +17,10 @@ final class AppState {
     private(set) var connection: Connection = .disconnected
     private(set) var accountId: String?
 
+    /// Letzter Verbindungsfehler war ein 401/403 — automatische Retries wären
+    /// dann sinnlos (und würden Jira mit falschen Credentials hämmern).
+    private var lastConnectWasAuthFailure = false
+
     /// Snapshot des zuletzt erfolgreich verbundenen Clients. Der Sync nutzt
     /// diesen statt der live an die Settings-UI gebundenen Felder — sonst
     /// würde Tippen im Token-Feld sofort die laufenden Requests kaputt machen.
@@ -52,15 +56,42 @@ final class AppState {
 
     var isConnecting: Bool { connection == .connecting }
 
-    /// Beim Start aufgerufen: nur verbinden, wenn alle Daten vorhanden sind.
+    /// Beim Start aufgerufen. Verbindet, sobald Zugangsdaten lesbar sind — und
+    /// versucht es periodisch weiter: Beim automatischen Start (Login-Item,
+    /// Dark Wake) kann der Keychain-Read transient scheitern (OSStatus -25320
+    /// „no UI possible") und das Netzwerk ist oft noch nicht da. Nur bei
+    /// tatsächlich abgelehnter Anmeldung (401) wird aufgegeben — dann muss der
+    /// User das Token prüfen.
     func restore() async {
-        guard !email.isEmpty, !apiToken.isEmpty else { return }
+        while !isConnected {
+            await retryRestoreIfNeeded()
+            if isConnected { return }
+            if lastConnectWasAuthFailure {
+                Log.app.error("Restore aufgegeben: Anmeldung abgelehnt, Token prüfen.")
+                return
+            }
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+        }
+    }
+
+    /// Ein einzelner Wiederverbindungs-Versuch (auch beim Öffnen des Popovers
+    /// aufgerufen — mit sichtbarer UI darf die Keychain nachfragen).
+    func retryRestoreIfNeeded() async {
+        guard !isConnected, !isConnecting else { return }
+        if apiToken.isEmpty, !email.isEmpty {
+            apiToken = keychain.get(account: email) ?? ""
+        }
+        guard !email.isEmpty, !apiToken.isEmpty else {
+            Log.app.info("Restore: keine vollständigen Zugangsdaten (E-Mail: \(!self.email.isEmpty), Token: \(!self.apiToken.isEmpty))")
+            return
+        }
         await connect()
     }
 
     /// Verbindungstest gegen `/myself`. Bei Erfolg werden Site/E-Mail in
     /// UserDefaults und das Token in der Keychain persistiert.
     func connect() async {
+        guard !isConnecting else { return }
         guard let base = normalizedBaseURL() else {
             setConnection(.failed("Bitte eine gültige Site-URL angeben."))
             return
@@ -78,11 +109,20 @@ final class AppState {
             let me = try await client.currentUser()
             accountId = me.accountId
             activeClient = client
+            lastConnectWasAuthFailure = false
             persist(token: token, email: trimmedEmail)
+            Log.app.info("Verbunden als \(me.displayName, privacy: .public)")
             setConnection(.connected(displayName: me.displayName,
                                      accountEmail: me.emailAddress ?? trimmedEmail))
         } catch {
-            setConnection(.failed((error as? JiraError)?.userMessage ?? error.localizedDescription))
+            if case JiraError.unauthorized = error {
+                lastConnectWasAuthFailure = true
+            } else {
+                lastConnectWasAuthFailure = false
+            }
+            let message = (error as? JiraError)?.userMessage ?? error.localizedDescription
+            Log.app.error("Verbindung fehlgeschlagen: \(message, privacy: .public)")
+            setConnection(.failed(message))
         }
     }
 

@@ -12,6 +12,9 @@ enum NotificationKind: String, Codable, Sendable {
 enum NotificationSourceKind: String, Codable, Sendable {
     case rest
     case bell
+    /// Manuell nachgeladene ältere Kommentare (Konversationsansicht) — vom
+    /// automatischen Purge ausgenommen.
+    case history
 }
 
 /// Ein einzelnes Notification-Event in der Timeline. `dedupKey` ist eindeutig,

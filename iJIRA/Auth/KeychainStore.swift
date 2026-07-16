@@ -31,7 +31,12 @@ struct KeychainStore {
         ]
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
+        guard status == errSecSuccess, let data = item as? Data else {
+            if status != errSecItemNotFound {
+                Log.app.error("Keychain-Read fehlgeschlagen: OSStatus \(status)")
+            }
+            return nil
+        }
         return String(data: data, encoding: .utf8)
     }
 

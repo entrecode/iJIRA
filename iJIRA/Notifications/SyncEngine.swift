@@ -26,6 +26,10 @@ final class SyncEngine {
     private var syncTask: Task<Void, Never>?
     private var currentInterval: TimeInterval = 90
 
+    /// Vom Server via `Retry-After` (HTTP 429) vorgegebene Wartezeit — hat
+    /// für den nächsten Schlaf Vorrang vor dem generischen Backoff.
+    private var serverRetryAfter: TimeInterval?
+
     /// Soll der Loop laufen? Entkoppelt von `syncTask`, damit `kick()` nach
     /// einem Disconnect nicht versehentlich wieder startet.
     private var shouldBeRunning = false
@@ -64,11 +68,13 @@ final class SyncEngine {
     func start() {
         shouldBeRunning = true
         guard syncTask == nil else { return }
+        Log.sync.info("Sync-Loop gestartet")
         beginActivity()
         startLoop()
     }
 
     func stop() {
+        Log.sync.info("Sync-Loop gestoppt")
         shouldBeRunning = false
         syncTask?.cancel()
         syncTask = nil
@@ -82,6 +88,7 @@ final class SyncEngine {
     /// alter Request tot sein kann und sofortige Aktualität gewünscht ist.
     func kick() {
         guard shouldBeRunning, !restartInFlight else { return }
+        Log.sync.info("Kick: Sync-Loop wird hart neu gestartet")
         restartInFlight = true
         currentInterval = Self.baseInterval
         let old = syncTask
@@ -100,7 +107,10 @@ final class SyncEngine {
             while !Task.isCancelled {
                 await runGuardedSync()
                 if Task.isCancelled { break }
-                if lastError != nil {
+                if let retryAfter = serverRetryAfter {
+                    serverRetryAfter = nil
+                    currentInterval = min(max(retryAfter, 1), 1800)
+                } else if lastError != nil {
                     currentInterval = min(currentInterval * 2, Self.maxInterval)
                 } else {
                     currentInterval = Self.baseInterval
@@ -132,6 +142,7 @@ final class SyncEngine {
         isSyncing = true
         defer { isSyncing = false }
 
+        let started = Date()
         do {
             let issues = try await client.searchInvolvedIssues()
             var fresh: [JiraNotification] = []
@@ -156,12 +167,25 @@ final class SyncEngine {
             }
 
             store.purgeOldNotifications()
+            store.purgeStaleCursors()
+
+            let duration = Date().timeIntervalSince(started)
+            Log.sync.info("Sync ok: \(issues.count) Issues, \(fresh.count) neu, \(duration, format: .fixed(precision: 1))s")
         } catch is CancellationError {
             lastError = "Synchronisierung abgebrochen (Timeout)."
+            Log.sync.error("Sync abgebrochen (Watchdog/Cancel) nach \(Date().timeIntervalSince(started), format: .fixed(precision: 1))s")
         } catch let error as URLError where error.code == .cancelled {
             lastError = "Synchronisierung abgebrochen (Timeout)."
+            Log.sync.error("Sync abgebrochen (URLError.cancelled) nach \(Date().timeIntervalSince(started), format: .fixed(precision: 1))s")
+        } catch let error as JiraError {
+            if case .rateLimited(let retryAfter) = error {
+                serverRetryAfter = retryAfter
+            }
+            lastError = error.userMessage
+            Log.sync.error("Sync fehlgeschlagen: \(error.userMessage, privacy: .public)")
         } catch {
-            lastError = (error as? JiraError)?.userMessage ?? error.localizedDescription
+            lastError = error.localizedDescription
+            Log.sync.error("Sync fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
         }
     }
 

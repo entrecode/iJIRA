@@ -34,6 +34,7 @@ final class NotificationStore {
         } catch {
             // Store kaputt/inkompatibel: Datei entfernen und frisch anlegen —
             // der Sync baut die letzten 7 Tage ohnehin wieder auf.
+            Log.store.error("ModelContainer fehlgeschlagen, Store wird neu angelegt: \(error, privacy: .public)")
             let fm = FileManager.default
             for suffix in ["", "-shm", "-wal"] {
                 try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + suffix))
@@ -44,6 +45,7 @@ final class NotificationStore {
                     configurations: [ModelConfiguration(schema: schema, url: storeURL)])
             } catch {
                 // Letzte Rettung: In-Memory, damit die App nie am Store scheitert.
+                Log.store.fault("Store auch nach Neuanlage kaputt, Fallback auf In-Memory: \(error, privacy: .public)")
                 let memory = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
                 container = try! ModelContainer(for: schema, configurations: [memory])
             }
@@ -153,21 +155,42 @@ final class NotificationStore {
             unreadDidChange?(unreadCount)
             return true
         } catch {
-            print("SwiftData save error: \(error)")
+            Log.store.error("SwiftData save error: \(error, privacy: .public)")
             context.rollback()
             return false
         }
     }
 
-    /// Löscht alte, gelesene Benachrichtigungen, um die Datenbank sauber zu halten.
+    /// Löscht alte, gelesene Benachrichtigungen, um die Datenbank sauber zu
+    /// halten. Manuell nachgeladene Historie (`source == .history`) bleibt —
+    /// sie ist per Definition alt und würde sonst sofort wieder verschwinden.
     func purgeOldNotifications(daysToKeep: Int = 30) {
         let cutoff = Date().addingTimeInterval(-TimeInterval(daysToKeep * 24 * 3600))
+        let historyRaw = NotificationSourceKind.history.rawValue
         let descriptor = FetchDescriptor<JiraNotification>(
-            predicate: #Predicate { $0.isRead == true && $0.createdAt < cutoff }
+            predicate: #Predicate {
+                $0.isRead == true && $0.createdAt < cutoff && $0.sourceRaw != historyRaw
+            }
         )
         if let oldItems = try? context.fetch(descriptor), !oldItems.isEmpty {
             for item in oldItems {
                 context.delete(item)
+            }
+            save()
+        }
+    }
+
+    /// Entfernt Cursors von Issues, die seit über `daysToKeep` Tagen nicht mehr
+    /// aktualisiert wurden — die Suche schaut nur 7 Tage zurück, solche Issues
+    /// tauchen also nicht mehr auf. Verhindert unbegrenztes Wachstum.
+    func purgeStaleCursors(daysToKeep: Int = 8) {
+        let cutoff = Date().addingTimeInterval(-TimeInterval(daysToKeep * 24 * 3600))
+        let descriptor = FetchDescriptor<SyncCursor>(
+            predicate: #Predicate { $0.lastSeenUpdated < cutoff }
+        )
+        if let stale = try? context.fetch(descriptor), !stale.isEmpty {
+            for cursor in stale {
+                context.delete(cursor)
             }
             save()
         }

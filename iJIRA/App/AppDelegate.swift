@@ -50,6 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: keys)
         }
 
+        // Tap auf die Sammel-Notification öffnet das Popover.
+        pushPresenter.openPopover = { [weak controller] in
+            controller?.showPopover()
+        }
+
         // Sync an den Verbindungsstatus koppeln.
         appState.onConnectionChanged = { [weak engine] connection in
             if case .connected = connection {

@@ -63,18 +63,33 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func togglePopover(_ sender: Any?) {
-        guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(sender)
         } else {
-            // Inhalt frisch aufbauen, damit nichts von einem früheren (evtl. über
-            // den Schlaf eingefrorenen) Zustand hängen bleibt.
-            popover.contentViewController = makeContentViewController()
-            NSApp.activate(ignoringOtherApps: true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
-            // Beim Öffnen frisch synchronisieren (snappy UX).
-            Task { await syncEngine.syncNow() }
+            openPopover()
+        }
+    }
+
+    /// Öffnet das Popover programmatisch (z. B. Tap auf die Sammel-Notification).
+    func showPopover() {
+        guard !popover.isShown else { return }
+        openPopover()
+    }
+
+    private func openPopover() {
+        guard let button = statusItem.button else { return }
+        // Inhalt frisch aufbauen, damit nichts von einem früheren (evtl. über
+        // den Schlaf eingefrorenen) Zustand hängen bleibt.
+        popover.contentViewController = makeContentViewController()
+        NSApp.activate(ignoringOtherApps: true)
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+        // Beim Öffnen frisch synchronisieren (snappy UX). Falls die Verbindung
+        // nie zustande kam (Keychain-Read ohne UI gescheitert), jetzt — mit
+        // sichtbarer UI — erneut versuchen.
+        Task {
+            await appState.retryRestoreIfNeeded()
+            await syncEngine.syncNow()
         }
     }
 }

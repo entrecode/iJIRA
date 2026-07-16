@@ -25,18 +25,35 @@ struct JiraClient: Sendable {
 
     /// Issues, die mich betreffen und sich kürzlich geändert haben.
     /// Quelle für abgeleitete „direkte Notifications" (siehe Konzept §5.1).
-    func searchInvolvedIssues(maxResults: Int = 100) async throws -> [IssueDTO] {
-        let jql = "(assignee = currentUser() OR reporter = currentUser() OR watcher = currentUser())"
+    ///
+    /// Mentions: ein JQL-Feld `mentioned` existiert nicht — Jira legt Mentions
+    /// intern als `[~accountid:…]` ab, deshalb per Text-Suche über
+    /// `comment ~ currentUser()` / `description ~ currentUser()` (offizieller
+    /// Workaround laut Atlassian-Doku).
+    ///
+    /// Paginiert über `nextPageToken`, damit nach langer Downtime auch mehr
+    /// als eine Seite Ergebnisse ankommt (Obergrenze `maxPages`).
+    func searchInvolvedIssues(pageSize: Int = 100, maxPages: Int = 5) async throws -> [IssueDTO] {
+        let jql = "(assignee = currentUser() OR reporter = currentUser() OR watcher = currentUser()"
+            + " OR comment ~ currentUser() OR description ~ currentUser())"
             + " AND updated >= -7d ORDER BY updated DESC"
-        let body: [String: Any] = [
-            "jql": jql,
-            "maxResults": maxResults,
-            "fields": ["summary", "updated", "status", "assignee"],
-        ]
-        let response: IssueSearchResponse = try await post("rest/api/3/search/jql",
-                                                           json: body,
-                                                           as: IssueSearchResponse.self)
-        return response.issues
+        var issues: [IssueDTO] = []
+        var nextPageToken: String?
+        for _ in 0..<maxPages {
+            var body: [String: Any] = [
+                "jql": jql,
+                "maxResults": pageSize,
+                "fields": ["summary", "updated", "status", "assignee"],
+            ]
+            if let nextPageToken { body["nextPageToken"] = nextPageToken }
+            let response: IssueSearchResponse = try await post("rest/api/3/search/jql",
+                                                               json: body,
+                                                               as: IssueSearchResponse.self)
+            issues += response.issues
+            guard response.isLast != true, let token = response.nextPageToken else { break }
+            nextPageToken = token
+        }
+        return issues
     }
 
     func comments(issueKey: String, maxResults: Int = 50) async throws -> [CommentDTO] {
@@ -44,6 +61,15 @@ struct JiraClient: Sendable {
             "rest/api/3/issue/\(issueKey)/comment?orderBy=-created&maxResults=\(maxResults)",
             as: CommentsResponse.self)
         return response.comments
+    }
+
+    /// Eine Seite älterer Kommentare (neueste zuerst) — für das Nachladen der
+    /// Historie in der Konversationsansicht. `startAt` = Anzahl bereits
+    /// bekannter Kommentare.
+    func commentsPage(issueKey: String, startAt: Int, maxResults: Int = 50) async throws -> CommentsResponse {
+        try await get(
+            "rest/api/3/issue/\(issueKey)/comment?orderBy=-created&startAt=\(startAt)&maxResults=\(maxResults)",
+            as: CommentsResponse.self)
     }
 
     @discardableResult
@@ -112,7 +138,12 @@ struct JiraClient: Sendable {
         case 404:
             throw JiraError.notFound
         case 429:
-            throw JiraError.rateLimited
+            // `Retry-After` (Sekunden) mitgeben, damit der Sync exakt so lange
+            // wartet statt generisch zu backoffen. HTTP-Datum-Variante ignorieren
+            // wir — Jira Cloud sendet Sekunden.
+            let retryAfter = http.value(forHTTPHeaderField: "Retry-After")
+                .flatMap { TimeInterval($0) }
+            throw JiraError.rateLimited(retryAfter: retryAfter)
         default:
             throw JiraError.http(status: http.statusCode)
         }
@@ -129,7 +160,7 @@ enum JiraError: Error {
     case decoding
     case unauthorized
     case notFound
-    case rateLimited
+    case rateLimited(retryAfter: TimeInterval?)
     case http(status: Int)
 
     var userMessage: String {

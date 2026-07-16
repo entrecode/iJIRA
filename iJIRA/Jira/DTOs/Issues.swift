@@ -40,6 +40,7 @@ struct UserDTO: Decodable, Sendable {
 
 struct CommentsResponse: Decodable, Sendable {
     let comments: [CommentDTO]
+    let total: Int?
 }
 
 struct CommentDTO: Decodable, Sendable {

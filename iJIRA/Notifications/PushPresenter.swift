@@ -10,6 +10,10 @@ final class PushPresenter: NSObject, UNUserNotificationCenterDelegate {
     private let store: NotificationStore
     private let center = UNUserNotificationCenter.current()
 
+    /// Öffnet das Menüleisten-Popover — Tap auf die Sammel-Notification
+    /// („N neue Benachrichtigungen") landet dort statt im Nichts.
+    @MainActor var openPopover: (() -> Void)?
+
     private static let categoryId = "JIRA_NOTIFICATION"
     private static let actionOpen = "OPEN_WEB"
     private static let actionRead = "MARK_READ"
@@ -101,10 +105,15 @@ final class PushPresenter: NSObject, UNUserNotificationCenterDelegate {
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let userInfo = response.notification.request.content.userInfo
         let action = response.actionIdentifier
+        let identifier = response.notification.request.identifier
         let urlString = userInfo["webURL"] as? String
         let dedupKey = userInfo["dedupKey"] as? String
         Task { @MainActor in
-            self.handle(action: action, urlString: urlString, dedupKey: dedupKey)
+            if identifier == "summary" {
+                self.openPopover?()
+            } else {
+                self.handle(action: action, urlString: urlString, dedupKey: dedupKey)
+            }
         }
         completionHandler()
     }

@@ -13,6 +13,9 @@ struct ConversationView: View {
     @State private var replyText = ""
     @State private var isSending = false
     @State private var sendError: String?
+    @State private var isLoadingOlder = false
+    @State private var olderFullyLoaded = false
+    @State private var loadOlderError: String?
 
     init(issueKey: String, store: NotificationStore, appState: AppState) {
         self.issueKey = issueKey
@@ -37,12 +40,36 @@ struct ConversationView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
                 issueHeader
+                loadOlderRow
                 ForEach(items) { item in
                     MessageBubble(notification: item)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
+        }
+    }
+
+    /// Die Timeline zeigt nur, was der Sync je gesehen hat — hierüber lässt
+    /// sich der Rest der Kommentar-Historie via REST nachziehen.
+    @ViewBuilder
+    private var loadOlderRow: some View {
+        if !olderFullyLoaded {
+            VStack(spacing: 2) {
+                if isLoadingOlder {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Ältere Kommentare laden") {
+                        Task { await loadOlderComments() }
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                }
+                if let error = loadOlderError {
+                    Text(error).font(.caption2).foregroundStyle(.orange)
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -102,6 +129,55 @@ struct ConversationView: View {
             }
         }
         .padding(12)
+    }
+
+    // MARK: - Load older history
+
+    /// Zieht die nächste Seite älterer Kommentare via REST nach. `startAt` ist
+    /// die Anzahl bereits bekannter Kommentare — Überlappungen fängt der
+    /// `dedupKey` ab. Nachgeladenes gilt als gelesen und wird als `.history`
+    /// markiert, damit der Purge es nicht gleich wieder entfernt.
+    private func loadOlderComments() async {
+        guard !isLoadingOlder, let client = appState.currentClient() else { return }
+        isLoadingOlder = true
+        loadOlderError = nil
+        defer { isLoadingOlder = false }
+
+        let knownComments = items.filter { $0.kind == .comment }.count
+        do {
+            let page = try await client.commentsPage(issueKey: issueKey, startAt: knownComments)
+            for comment in page.comments {
+                let author = comment.author?.displayName ?? "jemand"
+                var adfJSON: String?
+                if let body = comment.body, let data = try? JSONEncoder().encode(body) {
+                    adfJSON = String(data: data, encoding: .utf8)
+                }
+                let notification = JiraNotification(
+                    dedupKey: "comment:\(issueKey):\(comment.id)",
+                    issueKey: issueKey,
+                    issueSummary: items.first?.issueSummary ?? issueKey,
+                    kind: .comment,
+                    title: "Kommentar von \(author)",
+                    bodyPreview: String(comment.bodyText.prefix(280)),
+                    actorName: author,
+                    actorAvatarURLString: comment.author?.avatar48,
+                    webURLString: appState.issueWebURL(issueKey, commentId: comment.id),
+                    bodyADFJSON: adfJSON,
+                    createdAt: JiraDate.parse(comment.created) ?? .distantPast,
+                    receivedAt: Date(),
+                    isRead: true,
+                    source: .history)
+                store.insertIfNew(notification)
+            }
+            store.save()
+
+            let total = page.total ?? 0
+            if page.comments.isEmpty || knownComments + page.comments.count >= total {
+                olderFullyLoaded = true
+            }
+        } catch {
+            loadOlderError = (error as? JiraError)?.userMessage ?? "Laden fehlgeschlagen."
+        }
     }
 
     // MARK: - Send

@@ -73,6 +73,10 @@ if [ "$HAS_CERT" = true ]; then
     echo
     echo "✅ Fertig: $APP (signiert + notarisiert)"
 else
+    echo "==> Zippen"
+    rm -f "$ZIP"
+    ditto -c -k --keepParent "$APP" "$ZIP"
+
     echo
-    echo "✅ Fertig: $APP (ad-hoc, ohne Notarisierung)"
+    echo "✅ Fertig: $ZIP (ad-hoc, ohne Notarisierung)"
 fi

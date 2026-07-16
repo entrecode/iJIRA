@@ -47,9 +47,19 @@ final class MenuBarController: NSObject {
     private func configurePopover() {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 380, height: 520)
+        popover.contentViewController = makeContentViewController()
+    }
+
+    /// Baut den Popover-Inhalt frisch auf. Wird bei jedem Öffnen neu erzeugt:
+    /// Ein langlebiger `NSHostingController` friert über den System-Schlaf ein
+    /// (SwiftUI pausiert Render-Pässe für das off-screen View) und zeigt beim
+    /// Wieder-Öffnen einen veralteten Stand samt eingefrorener Relativzeiten.
+    /// Ein frischer Controller erzwingt einen Render-Pass mit aktueller Uhr und
+    /// aktuellem `@Query`.
+    private func makeContentViewController() -> NSViewController {
         let root = RootView(appState: appState, store: store, syncEngine: syncEngine)
             .modelContainer(store.container)
-        popover.contentViewController = NSHostingController(rootView: root)
+        return NSHostingController(rootView: root)
     }
 
     @objc private func togglePopover(_ sender: Any?) {
@@ -57,6 +67,9 @@ final class MenuBarController: NSObject {
         if popover.isShown {
             popover.performClose(sender)
         } else {
+            // Inhalt frisch aufbauen, damit nichts von einem früheren (evtl. über
+            // den Schlaf eingefrorenen) Zustand hängen bleibt.
+            popover.contentViewController = makeContentViewController()
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()

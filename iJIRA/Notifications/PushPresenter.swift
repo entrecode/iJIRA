@@ -81,7 +81,7 @@ final class PushPresenter: NSObject, UNUserNotificationCenterDelegate {
         content.title = "iJIRA"
         content.body = "\(count) neue Benachrichtigungen"
         content.sound = .default
-        let request = UNNotificationRequest(identifier: "summary-\(count)",
+        let request = UNNotificationRequest(identifier: "summary",
                                             content: content,
                                             trigger: nil)
         center.add(request)

@@ -6,6 +6,17 @@ struct JiraClient: Sendable {
     let email: String
     let apiToken: String
 
+    /// Eigene Session statt `URLSession.shared`: deren Default-Resource-Timeout
+    /// beträgt 7 Tage — ein nach Sleep/Wake halbtoter Request würde den
+    /// Sync-Loop dauerhaft blockieren. Hier ist nach spätestens 60 s Schluss.
+    private static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 20
+        config.timeoutIntervalForResource = 60
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
     // MARK: - Endpoints
 
     func currentUser() async throws -> Myself {
@@ -14,7 +25,7 @@ struct JiraClient: Sendable {
 
     /// Issues, die mich betreffen und sich kürzlich geändert haben.
     /// Quelle für abgeleitete „direkte Notifications" (siehe Konzept §5.1).
-    func searchInvolvedIssues(maxResults: Int = 30) async throws -> [IssueDTO] {
+    func searchInvolvedIssues(maxResults: Int = 100) async throws -> [IssueDTO] {
         let jql = "(assignee = currentUser() OR reporter = currentUser() OR watcher = currentUser())"
             + " AND updated >= -7d ORDER BY updated DESC"
         let body: [String: Any] = [
@@ -28,7 +39,7 @@ struct JiraClient: Sendable {
         return response.issues
     }
 
-    func comments(issueKey: String, maxResults: Int = 20) async throws -> [CommentDTO] {
+    func comments(issueKey: String, maxResults: Int = 50) async throws -> [CommentDTO] {
         let response: CommentsResponse = try await get(
             "rest/api/3/issue/\(issueKey)/comment?orderBy=-created&maxResults=\(maxResults)",
             as: CommentsResponse.self)
@@ -40,11 +51,20 @@ struct JiraClient: Sendable {
         try await post("rest/api/3/issue/\(issueKey)/comment", json: adfBody, as: CommentDTO.self)
     }
 
-    func changelog(issueKey: String, maxResults: Int = 20) async throws -> [ChangeHistory] {
-        let response: ChangelogResponse = try await get(
+    /// Changelog-Einträge — garantiert die *neuesten*. Jira paginiert den
+    /// Changelog älteste zuerst; bei mehr Einträgen als `maxResults` muss
+    /// deshalb die letzte Seite geholt werden, sonst sieht man bei
+    /// langlebigen Issues neue Statuswechsel nie.
+    func changelog(issueKey: String, maxResults: Int = 40) async throws -> [ChangeHistory] {
+        let first: ChangelogResponse = try await get(
             "rest/api/3/issue/\(issueKey)/changelog?maxResults=\(maxResults)",
             as: ChangelogResponse.self)
-        return response.values
+        guard let total = first.total, total > first.values.count else { return first.values }
+        let offset = max(0, total - maxResults)
+        let last: ChangelogResponse = try await get(
+            "rest/api/3/issue/\(issueKey)/changelog?startAt=\(offset)&maxResults=\(maxResults)",
+            as: ChangelogResponse.self)
+        return last.values
     }
 
     // MARK: - Request plumbing
@@ -52,7 +72,7 @@ struct JiraClient: Sendable {
     private func get<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
         var request = try makeRequest(path)
         request.httpMethod = "GET"
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         return try decode(T.self, data: data, response: response)
     }
 
@@ -61,7 +81,7 @@ struct JiraClient: Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: json)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         return try decode(T.self, data: data, response: response)
     }
 

@@ -36,6 +36,7 @@ struct ConversationView: View {
     private var messageList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
+                issueHeader
                 ForEach(items) { item in
                     MessageBubble(notification: item)
                 }
@@ -43,6 +44,34 @@ struct ConversationView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
         }
+    }
+
+    private var issueHeader: some View {
+        Button {
+            if let url = URL(string: appState.issueWebURL(issueKey)) {
+                NSWorkspace.shared.open(url)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(issueKey)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    if let summary = items.first?.issueSummary {
+                        Text(summary)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+                Spacer()
+                Image(systemName: "arrow.up.right.square")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.4)))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Reply bar
@@ -145,7 +174,7 @@ private struct MessageBubble: View {
                 if !notification.bodyPreview.isEmpty {
                     Text(notification.bodyPreview).font(.caption2)
                 }
-                Text(notification.createdAt.relativeShort).font(.caption2).foregroundStyle(.tertiary)
+                RelativeTimeText(date: notification.createdAt).font(.caption2).foregroundStyle(.tertiary)
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 12).padding(.vertical, 6)
@@ -161,7 +190,7 @@ private struct MessageBubble: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(notification.actorName).font(.caption.weight(.semibold))
-                    Text(notification.createdAt.relativeShort).font(.caption2).foregroundStyle(.tertiary)
+                    RelativeTimeText(date: notification.createdAt).font(.caption2).foregroundStyle(.tertiary)
                 }
                 bodyText
                     .font(.subheadline)

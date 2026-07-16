@@ -186,6 +186,17 @@ struct RootView: View {
 
     private var footer: some View {
         HStack {
+            // Gesundheits-Indikator: bleibt der Zeitstempel stehen, stimmt
+            // etwas mit dem Sync nicht.
+            if let synced = syncEngine.lastSyncedAt {
+                HStack(spacing: 3) {
+                    Text("Aktualisiert")
+                    RelativeTimeText(date: synced)
+                }
+                .font(.caption2)
+                .foregroundStyle(syncEngine.lastError == nil ? Color.secondary : Color.orange)
+                .help(syncEngine.lastError ?? "Sync läuft normal")
+            }
             Spacer()
             Button("Beenden") { NSApp.terminate(nil) }
                 .controlSize(.small)

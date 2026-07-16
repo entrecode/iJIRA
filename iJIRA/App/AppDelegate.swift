@@ -44,6 +44,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.unreadDidChange = { [weak controller] count in
             controller?.updateBadge(unread: count)
         }
+        
+        // Notifications bei Gelesen-Markierung aus dem Notification Center entfernen.
+        store.onNotificationsRead = { keys in
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: keys)
+        }
 
         // Sync an den Verbindungsstatus koppeln.
         appState.onConnectionChanged = { [weak engine] connection in

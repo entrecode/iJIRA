@@ -55,6 +55,8 @@ struct CommentDTO: Decodable, Sendable {
 
 struct ChangelogResponse: Decodable, Sendable {
     let values: [ChangeHistory]
+    let total: Int?
+    let startAt: Int?
 }
 
 struct ChangeHistory: Decodable, Sendable {

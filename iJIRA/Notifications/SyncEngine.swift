@@ -1,10 +1,18 @@
+import AppKit
 import Foundation
+import Network
 import Observation
 
 /// Pollt Jira in festem Intervall, leitet aus Issues/Kommentaren/Changelog
 /// Notification-Events ab und persistiert neue Einträge im `NotificationStore`.
-/// In M1 ohne Push (das ist M2); das Menüleisten-Badge wird über den Store
-/// (`unreadDidChange`) aktualisiert.
+///
+/// Zuverlässigkeit im Dauerbetrieb (Menüleisten-Agent):
+/// - `ProcessInfo`-Activity verhindert App Nap (sonst drosselt macOS den
+///   Prozess nach Idle-Zeit und Timer feuern massiv verspätet).
+/// - Aufwachen aus dem Ruhezustand und Netzwerk-Rückkehr starten den Loop
+///   hart neu (`kick()`) — inklusive Abbruch eines evtl. festhängenden Requests.
+/// - Ein Watchdog bricht jeden Sync nach spätestens 5 Minuten ab, damit der
+///   Loop nie dauerhaft blockiert.
 @MainActor
 @Observable
 final class SyncEngine {
@@ -15,9 +23,22 @@ final class SyncEngine {
     private let appState: AppState
     private let store: NotificationStore
     private let push: PushPresenter
-    private var timer: Timer?
+    private var syncTask: Task<Void, Never>?
+    private var currentInterval: TimeInterval = 90
 
-    private static let interval: TimeInterval = 90
+    /// Soll der Loop laufen? Entkoppelt von `syncTask`, damit `kick()` nach
+    /// einem Disconnect nicht versehentlich wieder startet.
+    private var shouldBeRunning = false
+    private var restartInFlight = false
+
+    private var activity: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+    private let pathMonitor = NWPathMonitor()
+    private var networkWasSatisfied = true
+
+    private static let baseInterval: TimeInterval = 90
+    private static let maxInterval: TimeInterval = 900 // 15 min
+    private static let syncTimeout: TimeInterval = 300
     private static let baselineKey = "didEstablishBaseline"
 
     /// Beim allerersten Sync (frische Installation/neuer Account) werden
@@ -32,6 +53,7 @@ final class SyncEngine {
         self.appState = appState
         self.store = store
         self.push = push
+        installResilienceTriggers()
     }
 
     /// Beim Trennen zurücksetzen, damit ein neuer Account wieder still startet.
@@ -40,18 +62,69 @@ final class SyncEngine {
     }
 
     func start() {
-        guard timer == nil else { return }
-        let timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            Task { await self.syncNow() }
-        }
-        self.timer = timer
-        Task { await syncNow() }
+        shouldBeRunning = true
+        guard syncTask == nil else { return }
+        beginActivity()
+        startLoop()
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        shouldBeRunning = false
+        syncTask?.cancel()
+        syncTask = nil
+        currentInterval = Self.baseInterval
+        endActivity()
+    }
+
+    /// Harter Neustart des Sync-Loops: bricht den laufenden Durchlauf samt
+    /// in-flight Request ab und beginnt sofort frisch. Wird nach dem Aufwachen
+    /// und bei Netzwerk-Rückkehr aufgerufen — genau die Momente, in denen ein
+    /// alter Request tot sein kann und sofortige Aktualität gewünscht ist.
+    func kick() {
+        guard shouldBeRunning, !restartInFlight else { return }
+        restartInFlight = true
+        currentInterval = Self.baseInterval
+        let old = syncTask
+        syncTask = nil
+        old?.cancel()
+        Task {
+            await old?.value
+            restartInFlight = false
+            guard shouldBeRunning, syncTask == nil else { return }
+            startLoop()
+        }
+    }
+
+    private func startLoop() {
+        syncTask = Task {
+            while !Task.isCancelled {
+                await runGuardedSync()
+                if Task.isCancelled { break }
+                if lastError != nil {
+                    currentInterval = min(currentInterval * 2, Self.maxInterval)
+                } else {
+                    currentInterval = Self.baseInterval
+                }
+                try? await Task.sleep(nanoseconds: UInt64(currentInterval * 1_000_000_000))
+            }
+        }
+    }
+
+    /// Führt einen Sync mit Watchdog aus: hängt trotz der Session-Timeouts
+    /// etwas fest, wird nach `syncTimeout` hart abgebrochen statt den Loop
+    /// zu blockieren. Cancel des Loops (kick/stop) reicht bis in den Sync durch.
+    private func runGuardedSync() async {
+        let sync = Task { await self.syncNow() }
+        let watchdog = Task {
+            try? await Task.sleep(nanoseconds: UInt64(Self.syncTimeout * 1_000_000_000))
+            sync.cancel()
+        }
+        await withTaskCancellationHandler {
+            await sync.value
+        } onCancel: {
+            sync.cancel()
+        }
+        watchdog.cancel()
     }
 
     func syncNow() async {
@@ -65,22 +138,75 @@ final class SyncEngine {
             for issue in issues {
                 fresh += await process(issue: issue, client: client)
             }
-            store.save()
+            let saved = store.save()
             lastError = nil
             lastSyncedAt = Date()
 
             // Erst-Sync still einlesen; ab dann neue Einträge pushen.
             if didEstablishBaseline {
-                push.presentBatch(fresh)
+                if saved {
+                    push.presentBatch(fresh)
+                }
             } else {
                 // Historische Einträge direkt als gelesen markieren – kein Badge-Flood.
                 fresh.forEach { $0.isRead = true }
-                store.save()
-                didEstablishBaseline = true
+                if store.save() {
+                    didEstablishBaseline = true
+                }
             }
+
+            store.purgeOldNotifications()
+        } catch is CancellationError {
+            lastError = "Synchronisierung abgebrochen (Timeout)."
+        } catch let error as URLError where error.code == .cancelled {
+            lastError = "Synchronisierung abgebrochen (Timeout)."
         } catch {
             lastError = (error as? JiraError)?.userMessage ?? error.localizedDescription
         }
+    }
+
+    // MARK: - Resilience (Wake, Netzwerk, App Nap)
+
+    private func installResilienceTriggers() {
+        // Nach dem Aufwachen kurz warten (Netzwerk braucht einen Moment),
+        // dann den Loop hart neu starten.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                self?.kick()
+            }
+        }
+
+        // Netzwerk kommt zurück (WLAN-Wechsel, VPN, Offline → Online) → sofort syncen.
+        pathMonitor.pathUpdateHandler = { path in
+            let satisfied = path.status == .satisfied
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if satisfied && !self.networkWasSatisfied {
+                    self.kick()
+                }
+                self.networkWasSatisfied = satisfied
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue.global(qos: .utility))
+    }
+
+    /// Verhindert App Nap, solange der Sync-Loop laufen soll — ohne den
+    /// System-Ruhezustand zu blockieren (`AllowingIdleSystemSleep`).
+    private func beginActivity() {
+        guard activity == nil else { return }
+        activity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep],
+            reason: "Periodischer Jira-Sync")
+    }
+
+    private func endActivity() {
+        if let activity {
+            ProcessInfo.processInfo.endActivity(activity)
+        }
+        activity = nil
     }
 
     // MARK: - Per-issue processing
@@ -94,15 +220,27 @@ final class SyncEngine {
         // Unverändert seit letztem Sync? Dann sparen wir uns die Detail-Requests.
         if let cursor, issueUpdated <= cursor.lastSeenUpdated { return inserted }
 
+        // Alles bis zum zuletzt gesehenen Stand gilt als historisch (kein Push,
+        // direkt gelesen): beim ersten Kontakt mit dem Issue alles älter als 1 h
+        // vor dem letzten Update, danach alles bis zum Cursor-Stand. Verhindert
+        // u. a., dass bereits gepurgte alte Kommentare erneut als „neu" gepusht
+        // werden, wenn ein altes Issue wieder aktiv wird.
+        let historicalCutoff = cursor?.lastSeenUpdated ?? issueUpdated.addingTimeInterval(-3600)
+
         let myAccountId = appState.accountId
         var newestCommentId: String?
 
+        var fetchFailed = false
+
         // Kommentare → eigene Timeline-Events (Dedup über Kommentar-ID).
-        if let comments = try? await client.comments(issueKey: issue.key) {
+        do {
+            let comments = try await client.comments(issueKey: issue.key)
             newestCommentId = comments.first?.id
             for comment in comments {
                 guard comment.author?.accountId != myAccountId else { continue } // eigene überspringen
                 let created = JiraDate.parse(comment.created) ?? .distantPast
+                let isHistorical = created <= historicalCutoff
+
                 let author = comment.author?.displayName ?? "jemand"
                 var adfJSON: String?
                 if let body = comment.body, let data = try? JSONEncoder().encode(body) {
@@ -121,17 +259,26 @@ final class SyncEngine {
                     bodyADFJSON: adfJSON,
                     createdAt: created,
                     receivedAt: Date(),
-                    isRead: false,
+                    isRead: isHistorical,
                     source: .rest)
-                if store.insertIfNew(notification) { inserted.append(notification) }
+                if store.insertIfNew(notification) {
+                    if !isHistorical {
+                        inserted.append(notification)
+                    }
+                }
             }
+        } catch {
+            fetchFailed = true
         }
 
         // Changelog → Status-/Zuweisungs-Events.
-        if let histories = try? await client.changelog(issueKey: issue.key) {
+        do {
+            let histories = try await client.changelog(issueKey: issue.key)
             for history in histories {
                 guard history.author?.accountId != myAccountId else { continue }
                 let created = JiraDate.parse(history.created) ?? .distantPast
+                let isHistorical = created <= historicalCutoff
+
                 let author = history.author?.displayName ?? "jemand"
                 for item in history.items {
                     guard let event = describe(item: item, author: author) else { continue }
@@ -147,16 +294,25 @@ final class SyncEngine {
                         webURLString: appState.issueWebURL(issue.key),
                         createdAt: created,
                         receivedAt: Date(),
-                        isRead: false,
+                        isRead: isHistorical,
                         source: .rest)
-                    if store.insertIfNew(notification) { inserted.append(notification) }
+                    if store.insertIfNew(notification) {
+                        if !isHistorical {
+                            inserted.append(notification)
+                        }
+                    }
                 }
             }
+        } catch {
+            fetchFailed = true
         }
 
-        store.upsertCursor(issueKey: issue.key,
-                           lastSeenUpdated: issueUpdated,
-                           lastSeenCommentId: newestCommentId)
+        if !fetchFailed {
+            store.upsertCursor(issueKey: issue.key,
+                               lastSeenUpdated: issueUpdated,
+                               lastSeenCommentId: newestCommentId)
+        }
+
         return inserted
     }
 

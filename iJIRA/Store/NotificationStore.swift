@@ -11,6 +11,10 @@ final class NotificationStore {
     /// Wird nach jeder Mutation mit der aktuellen ungelesen-Anzahl aufgerufen
     /// (Badge-Aktualisierung).
     var unreadDidChange: ((Int) -> Void)?
+    
+    /// Wird aufgerufen, wenn Benachrichtigungen als gelesen markiert wurden,
+    /// um sie aus dem macOS Notification Center zu entfernen.
+    var onNotificationsRead: (([String]) -> Void)?
 
     private var context: ModelContext { container.mainContext }
 
@@ -29,6 +33,11 @@ final class NotificationStore {
     // MARK: - Cursors
 
     func cursor(for issueKey: String) -> SyncCursor? {
+        for model in context.insertedModelsArray {
+            if let cursor = model as? SyncCursor, cursor.issueKey == issueKey {
+                return cursor
+            }
+        }
         let descriptor = FetchDescriptor<SyncCursor>(
             predicate: #Predicate { $0.issueKey == issueKey })
         return try? context.fetch(descriptor).first
@@ -48,6 +57,11 @@ final class NotificationStore {
     // MARK: - Notifications
 
     func exists(dedupKey: String) -> Bool {
+        for model in context.insertedModelsArray {
+            if let notification = model as? JiraNotification, notification.dedupKey == dedupKey {
+                return true
+            }
+        }
         let descriptor = FetchDescriptor<JiraNotification>(
             predicate: #Predicate { $0.dedupKey == dedupKey })
         return ((try? context.fetchCount(descriptor)) ?? 0) > 0
@@ -70,6 +84,7 @@ final class NotificationStore {
 
     func markRead(_ notification: JiraNotification) {
         notification.isRead = true
+        onNotificationsRead?([notification.dedupKey])
         save()
     }
 
@@ -79,15 +94,18 @@ final class NotificationStore {
         let unread = (try? context.fetch(descriptor)) ?? []
         guard !unread.isEmpty else { return }
         unread.forEach { $0.isRead = true }
+        onNotificationsRead?(unread.map { $0.dedupKey })
         save()
     }
 
     func markAllRead() {
         let descriptor = FetchDescriptor<JiraNotification>(
             predicate: #Predicate { $0.isRead == false })
-        for notification in (try? context.fetch(descriptor)) ?? [] {
+        let unread = (try? context.fetch(descriptor)) ?? []
+        for notification in unread {
             notification.isRead = true
         }
+        onNotificationsRead?(unread.map { $0.dedupKey } + ["summary"])
         save()
     }
 
@@ -97,8 +115,32 @@ final class NotificationStore {
         return (try? context.fetchCount(descriptor)) ?? 0
     }
 
-    func save() {
-        try? context.save()
-        unreadDidChange?(unreadCount)
+    @discardableResult
+    func save() -> Bool {
+        do {
+            if context.hasChanges {
+                try context.save()
+            }
+            unreadDidChange?(unreadCount)
+            return true
+        } catch {
+            print("SwiftData save error: \(error)")
+            context.rollback()
+            return false
+        }
+    }
+
+    /// Löscht alte, gelesene Benachrichtigungen, um die Datenbank sauber zu halten.
+    func purgeOldNotifications(daysToKeep: Int = 30) {
+        let cutoff = Date().addingTimeInterval(-TimeInterval(daysToKeep * 24 * 3600))
+        let descriptor = FetchDescriptor<JiraNotification>(
+            predicate: #Predicate { $0.isRead == true && $0.createdAt < cutoff }
+        )
+        if let oldItems = try? context.fetch(descriptor), !oldItems.isEmpty {
+            for item in oldItems {
+                context.delete(item)
+            }
+            save()
+        }
     }
 }

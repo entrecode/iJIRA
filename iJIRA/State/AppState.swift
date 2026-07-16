@@ -17,6 +17,11 @@ final class AppState {
     private(set) var connection: Connection = .disconnected
     private(set) var accountId: String?
 
+    /// Snapshot des zuletzt erfolgreich verbundenen Clients. Der Sync nutzt
+    /// diesen statt der live an die Settings-UI gebundenen Felder — sonst
+    /// würde Tippen im Token-Feld sofort die laufenden Requests kaputt machen.
+    private var activeClient: JiraClient?
+
     // Eingabefelder (an die Settings-UI gebunden)
     var siteURLString: String
     var email: String
@@ -72,6 +77,7 @@ final class AppState {
         do {
             let me = try await client.currentUser()
             accountId = me.accountId
+            activeClient = client
             persist(token: token, email: trimmedEmail)
             setConnection(.connected(displayName: me.displayName,
                                      accountEmail: me.emailAddress ?? trimmedEmail))
@@ -84,20 +90,19 @@ final class AppState {
     func disconnect() {
         try? keychain.delete(account: email)
         accountId = nil
+        activeClient = nil
         setConnection(.disconnected)
     }
 
     // MARK: - Für SyncEngine
 
     func currentClient() -> JiraClient? {
-        guard isConnected, let base = normalizedBaseURL() else { return nil }
-        return JiraClient(baseURL: base,
-                          email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                          apiToken: apiToken.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard isConnected else { return nil }
+        return activeClient
     }
 
     func issueWebURL(_ key: String, commentId: String? = nil) -> String {
-        guard let base = normalizedBaseURL() else { return "" }
+        guard let base = activeClient?.baseURL ?? normalizedBaseURL() else { return "" }
         var string = base.absoluteString + "/browse/" + key
         if let commentId { string += "?focusedCommentId=\(commentId)" }
         return string

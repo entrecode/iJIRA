@@ -82,7 +82,7 @@ private struct ConversationRow: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tint)
                     Spacer()
-                    Text(conversation.latest.createdAt.relativeShort)
+                    RelativeTimeText(date: conversation.latest.createdAt)
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Text(conversation.summary)
@@ -110,10 +110,28 @@ private struct ConversationRow: View {
 }
 
 extension Date {
-    var relativeShort: String {
+    /// Kurzform relativ zu `reference` (Default: jetzt). Achtung: das Ergebnis
+    /// ist ein statischer String und „tickt" nicht von selbst — für Labels in
+    /// langlebigen Views `RelativeTimeText` verwenden.
+    func relativeShort(to reference: Date = Date()) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = Locale(identifier: "de_DE")
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: self, relativeTo: Date())
+        return formatter.localizedString(for: self, relativeTo: reference)
+    }
+}
+
+/// Selbst-aktualisierendes Relativ-Zeitlabel. `RelativeDateTimeFormatter`
+/// liefert nur statischen Text (korrekt zur Render-Zeit) — via `TimelineView`
+/// rechnen wir ihn minütlich gegen die aktuelle Uhr neu, damit „vor 1 Min."
+/// bei geöffnetem Popover nicht stehen bleibt. Font/Farbe erbt der innere
+/// `Text` aus der Umgebung.
+struct RelativeTimeText: View {
+    let date: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            Text(date.relativeShort(to: context.date))
+        }
     }
 }

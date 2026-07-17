@@ -38,6 +38,11 @@ final class JiraNotification {
     var receivedAt: Date
     var isRead: Bool
     var sourceRaw: String
+    /// Vom eigenen Account verfasst (eigener Kommentar). Eigene Nachrichten
+    /// erscheinen in der Timeline, sind aber nie ungelesen und werden nie
+    /// gepusht. Default `false`, damit bestehende Stores leichtgewichtig
+    /// migrieren.
+    var isOwn: Bool = false
 
     init(dedupKey: String,
          issueKey: String,
@@ -52,7 +57,8 @@ final class JiraNotification {
          createdAt: Date,
          receivedAt: Date,
          isRead: Bool,
-         source: NotificationSourceKind) {
+         source: NotificationSourceKind,
+         isOwn: Bool = false) {
         self.dedupKey = dedupKey
         self.issueKey = issueKey
         self.issueSummary = issueSummary
@@ -67,6 +73,7 @@ final class JiraNotification {
         self.receivedAt = receivedAt
         self.isRead = isRead
         self.sourceRaw = source.rawValue
+        self.isOwn = isOwn
     }
 
     var kind: NotificationKind { NotificationKind(rawValue: kindRaw) ?? .other }

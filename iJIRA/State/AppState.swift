@@ -16,6 +16,7 @@ final class AppState {
 
     private(set) var connection: Connection = .disconnected
     private(set) var accountId: String?
+    private(set) var myAvatarURLString: String?
 
     /// Letzter Verbindungsfehler war ein 401/403 — automatische Retries wären
     /// dann sinnlos (und würden Jira mit falschen Credentials hämmern).
@@ -108,6 +109,7 @@ final class AppState {
         do {
             let me = try await client.currentUser()
             accountId = me.accountId
+            myAvatarURLString = me.avatar48
             activeClient = client
             lastConnectWasAuthFailure = false
             persist(token: token, email: trimmedEmail)

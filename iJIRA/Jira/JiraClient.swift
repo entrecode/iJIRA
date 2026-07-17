@@ -125,14 +125,19 @@ struct JiraClient: Sendable {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, data: Data, response: URLResponse) throws -> T {
+        try validate(response)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw JiraError.decoding
+        }
+    }
+
+    private func validate(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { throw JiraError.invalidResponse }
         switch http.statusCode {
         case 200..<300:
-            do {
-                return try JSONDecoder().decode(T.self, from: data)
-            } catch {
-                throw JiraError.decoding
-            }
+            return
         case 401, 403:
             throw JiraError.unauthorized
         case 404:

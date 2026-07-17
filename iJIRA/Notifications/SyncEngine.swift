@@ -261,7 +261,9 @@ final class SyncEngine {
             let comments = try await client.comments(issueKey: issue.key)
             newestCommentId = comments.first?.id
             for comment in comments {
-                guard comment.author?.accountId != myAccountId else { continue } // eigene überspringen
+                // Eigene Kommentare landen ebenfalls in der Timeline (Chat-
+                // Vollständigkeit), aber immer als gelesen und ohne Push.
+                let isOwn = comment.author?.accountId == myAccountId
                 let created = JiraDate.parse(comment.created) ?? .distantPast
                 let isHistorical = created <= historicalCutoff
 
@@ -275,7 +277,7 @@ final class SyncEngine {
                     issueKey: issue.key,
                     issueSummary: issue.fields.summary,
                     kind: .comment,
-                    title: "Neuer Kommentar von \(author)",
+                    title: isOwn ? "Kommentar von \(author)" : "Neuer Kommentar von \(author)",
                     bodyPreview: String(comment.bodyText.prefix(280)),
                     actorName: author,
                     actorAvatarURLString: comment.author?.avatar48,
@@ -283,10 +285,11 @@ final class SyncEngine {
                     bodyADFJSON: adfJSON,
                     createdAt: created,
                     receivedAt: Date(),
-                    isRead: isHistorical,
-                    source: .rest)
+                    isRead: isHistorical || isOwn,
+                    source: .rest,
+                    isOwn: isOwn)
                 if store.insertIfNew(notification) {
-                    if !isHistorical {
+                    if !isHistorical && !isOwn {
                         inserted.append(notification)
                     }
                 }

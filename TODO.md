@@ -36,6 +36,35 @@ unten unter „Erledigt" sind umgesetzt.
   zieht weitere Kommentar-Seiten via REST nach (als gelesen, `source = history`,
   vom Purge ausgenommen).
 
+## Erledigt (2026-07-17)
+
+- [x] **Eigene Nachrichten anzeigen:** Der Sync überspringt eigene Kommentare
+  nicht mehr — sie erscheinen in der Timeline (Feld `isOwn`, immer gelesen,
+  nie gepusht) und werden im Chat rechtsbündig/getönt dargestellt. Selbst
+  gesendete Antworten tragen jetzt auch das eigene Avatar.
+
+## Nicht machbar (Stand 2026-07-17)
+
+- **Reactions anzeigen/senden:** Mit API-Token-Auth (Basic) gibt es keinen
+  funktionierenden Zugang zu Jira-Cloud-Kommentar-Reactions. Live gegen
+  `dein-team.atlassian.net` mit echten Credentials verifiziert:
+  - `POST /rest/internal/2/reactions/view` + `/emojis` (im Atlassian-KB
+    beschrieben): existiert nicht mehr → 404 „No endpoint".
+  - `/gateway/api/reactions/reactions` (GET/POST/DELETE; der Weg der Web-UI):
+    401 auch mit gültigem API-Token — der Service akzeptiert nur
+    Session-Cookies.
+  - GraphQL-Gateway `gateway/api/graphql` akzeptiert API-Tokens, aber dessen
+    `reactionsSummary*`/`addReaction`/`deleteReaction` gehören zum
+    **Confluence**-Reactions-Service (`ContainerType`-Enum ohne `ISSUE`,
+    Backend `pf-reactions-service` erwartet numerische Confluence-IDs).
+  - `rest/gira/1/` (site-lokales GraphQL des Issue-Views, Basic Auth ok):
+    Schema enthält keinerlei Reactions-Typen.
+  - Mobile-/Public-REST-Varianten und Comment-Properties (`expand=properties`):
+    404 bzw. leer.
+  Einziger denkbarer Weg wäre Cookie-/Session-Auth (WebView-Login) — großer
+  Umbau, bewusst nicht gemacht. Ggf. auf JRACLOUD-78153 (offizielles
+  Feature-Ticket „Comment reactions in REST API") warten.
+
 ## Offen
 
 - [ ] **Tests:** Es gibt kein Test-Target. Kandidaten mit dem besten Nutzen:

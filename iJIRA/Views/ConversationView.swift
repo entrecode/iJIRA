@@ -2,8 +2,9 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-/// Chat-Verlauf eines Issues: Kommentare als Sprechblasen, Status-/Zuweisungs-
-/// Events als zentrierte System-Zeilen. Älteste oben (wie ein Messenger).
+/// Chat-Verlauf eines Issues: Kommentare als Sprechblasen (eigene rechts,
+/// fremde links), Status-/Zuweisungs-Events als zentrierte System-Zeilen.
+/// Älteste oben (wie ein Messenger).
 struct ConversationView: View {
     let issueKey: String
     let store: NotificationStore
@@ -147,6 +148,7 @@ struct ConversationView: View {
         do {
             let page = try await client.commentsPage(issueKey: issueKey, startAt: knownComments)
             for comment in page.comments {
+                let isOwn = comment.author?.accountId == appState.accountId
                 let author = comment.author?.displayName ?? "jemand"
                 var adfJSON: String?
                 if let body = comment.body, let data = try? JSONEncoder().encode(body) {
@@ -166,7 +168,8 @@ struct ConversationView: View {
                     createdAt: JiraDate.parse(comment.created) ?? .distantPast,
                     receivedAt: Date(),
                     isRead: true,
-                    source: .history)
+                    source: .history,
+                    isOwn: isOwn)
                 store.insertIfNew(notification)
             }
             store.save()
@@ -211,13 +214,14 @@ struct ConversationView: View {
                 title: "Kommentar von \(displayName)",
                 bodyPreview: String(trimmed.prefix(280)),
                 actorName: displayName,
-                actorAvatarURLString: nil,
+                actorAvatarURLString: appState.myAvatarURLString,
                 webURLString: appState.issueWebURL(issueKey, commentId: comment.id),
                 bodyADFJSON: adfJSON,
                 createdAt: Date(),
                 receivedAt: Date(),
                 isRead: true,
-                source: .rest
+                source: .rest,
+                isOwn: true
             )
             store.insertIfNew(notification)
             replyText = ""
@@ -259,25 +263,34 @@ private struct MessageBubble: View {
         }
     }
 
-    // Kommentar-Sprechblase.
+    // Kommentar-Sprechblase — eigene rechtsbündig und getönt (Messenger-Optik).
     private var commentBubble: some View {
         HStack(alignment: .top, spacing: 8) {
-            AvatarView(url: notification.avatarURL, kind: notification.kind, size: 26)
-            VStack(alignment: .leading, spacing: 3) {
+            if notification.isOwn { Spacer(minLength: 40) }
+            if !notification.isOwn {
+                AvatarView(url: notification.avatarURL, kind: notification.kind, size: 26)
+            }
+            VStack(alignment: notification.isOwn ? .trailing : .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(notification.actorName).font(.caption.weight(.semibold))
+                    Text(notification.isOwn ? "Ich" : notification.actorName)
+                        .font(.caption.weight(.semibold))
                     RelativeTimeText(date: notification.createdAt).font(.caption2).foregroundStyle(.tertiary)
                 }
                 bodyText
                     .font(.subheadline)
                     .textSelection(.enabled)
                     .padding(.horizontal, 10).padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(.quaternary.opacity(0.35)))
+                    .background(RoundedRectangle(cornerRadius: 12)
+                        .fill(notification.isOwn ? AnyShapeStyle(Color.accentColor.opacity(0.18))
+                                                 : AnyShapeStyle(.quaternary.opacity(0.35))))
                 Button("Im Web öffnen") { open() }
                     .buttonStyle(.link)
                     .font(.caption2)
             }
-            Spacer(minLength: 12)
+            if notification.isOwn {
+                AvatarView(url: notification.avatarURL, kind: notification.kind, size: 26)
+            }
+            if !notification.isOwn { Spacer(minLength: 40) }
         }
     }
 

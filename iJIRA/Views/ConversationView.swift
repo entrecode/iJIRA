@@ -28,6 +28,11 @@ struct ConversationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Sticky: bleibt beim Scrollen sichtbar (bewusst außerhalb der ScrollView).
+            issueHeader
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            Divider()
             messageList
             Divider()
             replyBar
@@ -40,7 +45,6 @@ struct ConversationView: View {
     private var messageList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
-                issueHeader
                 loadOlderRow
                 ForEach(items) { item in
                     MessageBubble(notification: item)
@@ -49,6 +53,9 @@ struct ConversationView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
         }
+        // Beim Öffnen unten (bei den neuesten Nachrichten) starten; bleibt
+        // dort verankert, solange der Nutzer nicht selbst hochscrollt.
+        .defaultScrollAnchor(.bottom)
     }
 
     /// Die Timeline zeigt nur, was der Sync je gesehen hat — hierüber lässt

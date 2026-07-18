@@ -27,13 +27,22 @@ struct NamedDTO: Decodable, Sendable {
 
 // MARK: - User
 
-struct UserDTO: Decodable, Sendable {
+struct UserDTO: Decodable, Sendable, Identifiable, Hashable {
     let accountId: String?
     let displayName: String?
     let avatarUrls: [String: String]?
+    /// "atlassian" = Mensch, "app"/"customer" = Bot/Portal — für die
+    /// Personenauswahl werden nur echte Accounts angeboten.
+    let accountType: String?
+    let active: Bool?
+
+    var id: String { accountId ?? displayName ?? UUID().uuidString }
 
     /// Atlassian liefert Avatare in den Größen 16/24/32/48; wir nehmen 48px.
     var avatar48: String? { avatarUrls?["48x48"] }
+
+    static func == (lhs: UserDTO, rhs: UserDTO) -> Bool { lhs.accountId == rhs.accountId }
+    func hash(into hasher: inout Hasher) { hasher.combine(accountId) }
 }
 
 // MARK: - Kommentare (GET /rest/api/3/issue/{key}/comment)
@@ -119,4 +128,15 @@ struct ADFAttrs: Codable, Sendable {
     let url: String?
     let text: String?
     let shortName: String?
+    /// Mention-AccountId bzw. Media-UUID.
+    let id: String?
+    /// Heading-Level (1–6).
+    let level: Int?
+    /// Media: Dateiname (alt-Text) — einziger Weg, ADF-Media-Knoten den
+    /// REST-Attachments zuzuordnen (die Media-UUID taucht dort nicht auf).
+    let alt: String?
+    /// Media-Typ ("file") bzw. Panel-Typ ("info", "warning", …).
+    let type: String?
+    /// codeBlock-Sprache.
+    let language: String?
 }

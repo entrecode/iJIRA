@@ -17,6 +17,17 @@ struct JiraClient: Sendable {
         return URLSession(configuration: config)
     }()
 
+    /// Für Attachment-Up-/Downloads: gleiche Härtung, aber großzügigere
+    /// Limits (Videos!) — die 60-s-Grenze der API-Session würde große
+    /// Transfers abbrechen.
+    private static let mediaSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 600
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
     // MARK: - Endpoints
 
     func currentUser() async throws -> Myself {
@@ -77,6 +88,109 @@ struct JiraClient: Sendable {
         try await post("rest/api/3/issue/\(issueKey)/comment", json: adfBody, as: CommentDTO.self)
     }
 
+    // MARK: - Issue-Detail & Bearbeitung
+
+    func issueDetail(key: String) async throws -> IssueDetailDTO {
+        let fields = "summary,description,status,assignee,reporter,parent,issuelinks,attachment,issuetype,project,updated"
+        return try await get("rest/api/3/issue/\(key)?fields=\(fields)", as: IssueDetailDTO.self)
+    }
+
+    /// Felder eines Issues ändern (z. B. `{"summary": …}`, `{"description": <adf>}`,
+    /// `{"parent": {"key": …}}`).
+    func editIssue(key: String, fields: [String: Any]) async throws {
+        try await sendNoContent(method: "PUT", path: "rest/api/3/issue/\(key)",
+                                json: ["fields": fields])
+    }
+
+    /// Assignee setzen (`accountId = nil` ⇒ nicht zugewiesen).
+    func assignIssue(key: String, accountId: String?) async throws {
+        try await sendNoContent(method: "PUT", path: "rest/api/3/issue/\(key)/assignee",
+                                json: ["accountId": accountId ?? NSNull()])
+    }
+
+    // MARK: - Personen
+
+    /// Alle für ein Issue zuweisbaren Personen (fürs Assignee-Dropdown).
+    func assignableUsers(issueKey: String, maxResults: Int = 200) async throws -> [UserDTO] {
+        try await get("rest/api/3/user/assignable/search?issueKey=\(issueKey)&maxResults=\(maxResults)",
+                      as: [UserDTO].self)
+    }
+
+    /// Alle Nutzer der Site — wird einmalig vorgeladen (kleines Team), damit
+    /// Mentions/Zuweisungen ohne Server-Roundtrip vorgeschlagen werden können.
+    func allUsers(maxResults: Int = 300) async throws -> [UserDTO] {
+        try await get("rest/api/3/users/search?maxResults=\(maxResults)", as: [UserDTO].self)
+    }
+
+    // MARK: - Issue-Suche (Picker)
+
+    /// Schnelle Issue-Vorschläge (Historie + Volltext) fürs Suchfeld und die
+    /// Parent-/Link-Auswahl.
+    func issuePicker(query: String) async throws -> [IssuePickerResponse.Suggestion] {
+        let escaped = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        let response: IssuePickerResponse = try await get(
+            "rest/api/3/issue/picker?query=\(escaped)&showSubTasks=true&showSubTaskParent=true",
+            as: IssuePickerResponse.self)
+        return response.allSuggestions
+    }
+
+    // MARK: - Issue-Links
+
+    func issueLinkTypes() async throws -> [IssueLinkTypeDTO] {
+        try await get("rest/api/3/issueLinkType", as: IssueLinkTypesResponse.self).issueLinkTypes
+    }
+
+    func createIssueLink(typeName: String, inwardKey: String, outwardKey: String) async throws {
+        try await sendNoContent(method: "POST", path: "rest/api/3/issueLink", json: [
+            "type": ["name": typeName],
+            "inwardIssue": ["key": inwardKey],
+            "outwardIssue": ["key": outwardKey],
+        ])
+    }
+
+    func deleteIssueLink(id: String) async throws {
+        try await sendNoContent(method: "DELETE", path: "rest/api/3/issueLink/\(id)", json: nil)
+    }
+
+    // MARK: - Attachments
+
+    /// Lädt Dateien als Anhänge hoch (multipart/form-data).
+    func uploadAttachments(issueKey: String,
+                           files: [(filename: String, mimeType: String, data: Data)]) async throws -> [AttachmentDTO] {
+        var request = try makeRequest("rest/api/3/issue/\(issueKey)/attachments")
+        request.httpMethod = "POST"
+        request.setValue("no-check", forHTTPHeaderField: "X-Atlassian-Token")
+        let boundary = "iJIRA-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        for file in files {
+            body.append(Data("--\(boundary)\r\n".utf8))
+            let disposition = "Content-Disposition: form-data; name=\"file\"; filename=\"\(file.filename)\"\r\n"
+            body.append(Data(disposition.utf8))
+            body.append(Data("Content-Type: \(file.mimeType)\r\n\r\n".utf8))
+            body.append(file.data)
+            body.append(Data("\r\n".utf8))
+        }
+        body.append(Data("--\(boundary)--\r\n".utf8))
+        request.httpBody = body
+
+        let (data, response) = try await Self.mediaSession.data(for: request)
+        return try decode(AttachmentUploadResponse.self, data: data, response: response)
+    }
+
+    /// Rohdaten mit Authentifizierung laden (Attachment-Inhalte/-Thumbnails).
+    /// Der Attachment-Endpoint redirectet auf eine signierte Media-URL —
+    /// URLSession folgt automatisch.
+    func fetchData(from urlString: String) async throws -> Data {
+        guard let url = URL(string: urlString) else { throw JiraError.invalidResponse }
+        var request = URLRequest(url: url)
+        request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
+        let (data, response) = try await Self.mediaSession.data(for: request)
+        try validate(response)
+        return data
+    }
+
     /// Changelog-Einträge — garantiert die *neuesten*. Jira paginiert den
     /// Changelog älteste zuerst; bei mehr Einträgen als `maxResults` muss
     /// deshalb die letzte Seite geholt werden, sonst sieht man bei
@@ -122,6 +236,19 @@ struct JiraClient: Sendable {
         request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return request
+    }
+
+    /// Request, dessen Antwort-Body uninteressant ist (PUT/DELETE liefern 204):
+    /// nur der Status wird geprüft.
+    private func sendNoContent(method: String, path: String, json: [String: Any]?) async throws {
+        var request = try makeRequest(path)
+        request.httpMethod = method
+        if let json {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: json)
+        }
+        let (_, response) = try await Self.session.data(for: request)
+        try validate(response)
     }
 
     private func decode<T: Decodable>(_ type: T.Type, data: Data, response: URLResponse) throws -> T {

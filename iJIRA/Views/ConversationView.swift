@@ -84,10 +84,10 @@ struct ConversationView: View {
     }
 
     private var issueHeader: some View {
+        // Öffnet die Issue-Detailview (eigenes Fenster); der Weg ins Web
+        // steckt dort im Header.
         Button {
-            if let url = URL(string: appState.issueWebURL(issueKey)) {
-                NSWorkspace.shared.open(url)
-            }
+            IssueWindowManager.shared.open(issueKey: issueKey)
         } label: {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -102,7 +102,7 @@ struct ConversationView: View {
                     }
                 }
                 Spacer()
-                Image(systemName: "arrow.up.right.square")
+                Image(systemName: "macwindow")
                     .foregroundStyle(.secondary)
             }
             .padding(10)

@@ -7,6 +7,7 @@ struct IssueDetailView: View {
     @Bindable var model: IssueDetailModel
 
     @State private var copiedKey = false
+    @State private var dropTargeted = false
 
     var body: some View {
         ZStack {
@@ -53,19 +54,63 @@ struct IssueDetailView: View {
                     if !model.attachments.isEmpty {
                         IssueAttachmentsSection(model: model)
                     }
-                    if !(detail.fields.issuelinks ?? []).isEmpty {
-                        IssueLinksSection(model: model, detail: detail)
-                    }
+                    IssueLinksSection(model: model, detail: detail)
                     IssueCommentsSection(model: model)
                 }
                 .padding(20)
             }
+            // Dateien aus dem Finder auf das Fenster ziehen → Anhang-Upload.
+            .dropDestination(for: URL.self) { urls, _ in
+                Task { await model.uploadFiles(urls) }
+                return true
+            } isTargeted: { dropTargeted = $0 }
+            .overlay {
+                if dropTargeted {
+                    DropHintOverlay()
+                }
+            }
             .overlay(alignment: .bottom) {
-                if let actionError = model.actionError {
+                if model.isUploading {
+                    UploadingToast()
+                } else if let actionError = model.actionError {
                     ErrorToast(message: actionError) { model.actionError = nil }
                 }
             }
         }
+    }
+}
+
+/// Visuelles Feedback, solange ein Drag über dem Fenster schwebt.
+private struct DropHintOverlay: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.accentColor.opacity(0.08))
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+            Label("Als Anhang hochladen", systemImage: "square.and.arrow.up.on.square")
+                .font(.title3.weight(.medium))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background(.regularMaterial, in: Capsule())
+        }
+        .padding(12)
+        .allowsHitTesting(false)
+    }
+}
+
+private struct UploadingToast: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Lade Anhang hoch …").font(.callout)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(.quaternary, lineWidth: 1))
+        .shadow(color: .black.opacity(0.15), radius: 10, y: 3)
+        .padding(.bottom, 14)
     }
 }
 

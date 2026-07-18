@@ -14,6 +14,8 @@ struct ConversationView: View {
     @State private var replyText = ""
     @State private var isSending = false
     @State private var sendError: String?
+    @State private var mentionQuery: String?
+    @State private var editorController = MarkdownEditorController()
     @State private var isLoadingOlder = false
     @State private var olderFullyLoaded = false
     @State private var loadOlderError: String?
@@ -114,10 +116,12 @@ struct ConversationView: View {
     private var replyBar: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topLeading) {
-                MarkdownTextEditor(text: $replyText)
+                MarkdownTextEditor(text: $replyText,
+                                   controller: editorController,
+                                   onMentionQuery: { mentionQuery = $0 })
                     .frame(height: 64)
                 if replyText.isEmpty {
-                    Text("Antworten… (`code`, ```block```, **fett**, *kursiv*)")
+                    Text("Antworten… (`code`, ```block```, **fett**, *kursiv*, @Name)")
                         .font(.body)
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 9)
@@ -125,6 +129,9 @@ struct ConversationView: View {
                         .allowsHitTesting(false)
                 }
             }
+            MentionSuggestionsRow(directory: IssueWindowManager.shared.userDirectory,
+                                  query: mentionQuery,
+                                  controller: editorController)
             HStack(spacing: 8) {
                 if let error = sendError {
                     Text(error).font(.caption2).foregroundStyle(.red).lineLimit(1)
@@ -201,8 +208,9 @@ struct ConversationView: View {
         defer { isSending = false }
 
         do {
-            let comment = try await client.addComment(issueKey: issueKey,
-                                                      adfBody: markdownToADFBody(trimmed))
+            let comment = try await client.addComment(
+                issueKey: issueKey,
+                adfBody: markdownToADFBody(trimmed, siteBaseURL: appState.siteBaseURL))
 
             let displayName: String
             if case .connected(let name, _) = appState.connection { displayName = name }

@@ -210,6 +210,25 @@ private func parseInline(_ text: String, site: URL?) -> [[String: Any]] {
             }
         }
 
+        // Markdown-Link: [Text](url)
+        if ch == "[" {
+            if let closeBracket = text[next...].firstIndex(of: "]"),
+               text.index(after: closeBracket) < text.endIndex,
+               text[text.index(after: closeBracket)] == "(",
+               let closeParen = text[text.index(after: closeBracket)...].firstIndex(of: ")") {
+                let label = String(text[next..<closeBracket])
+                let href = String(text[text.index(closeBracket, offsetBy: 2)..<closeParen])
+                if href.hasPrefix("http://") || href.hasPrefix("https://") {
+                    flush()
+                    nodes.append(["type": "text", "text": label,
+                                  "marks": [["type": "link",
+                                             "attrs": ["href": href] as [String: Any]] as [String: Any]]])
+                    i = text.index(after: closeParen)
+                    continue
+                }
+            }
+        }
+
         // Inline code: `...`
         if ch == "`" {
             if let end = text[next...].firstIndex(of: "`") {

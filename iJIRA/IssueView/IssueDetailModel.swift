@@ -20,6 +20,9 @@ final class IssueDetailModel {
     /// Für ein Issue zuweisbare Personen (vorab geladen fürs Dropdown).
     private(set) var assignableUsers: [UserDTO] = []
 
+    /// Verfügbare Link-Typen (lazy beim ersten „Verknüpfung hinzufügen").
+    private(set) var linkTypes: [IssueLinkTypeDTO] = []
+
     /// Thumbnail-Cache: Attachment-ID → Bild. Einträge entstehen lazy über
     /// `thumbnail(for:)`.
     private(set) var thumbnails: [String: NSImage] = [:]
@@ -90,10 +93,30 @@ final class IssueDetailModel {
         }
     }
 
-    func saveDescription(adf: [String: Any]) async -> Bool {
-        await performEdit { client in
-            try await client.editIssue(key: self.issueKey, fields: ["description": adf])
+    /// Beschreibung als editierbares Markdown (plus die Blöcke, die Markdown
+    /// nicht abbilden kann — sie werden beim Speichern wieder angehängt).
+    func descriptionConversion() -> ADFMarkdownConversion {
+        guard let description = detail?.fields.description else {
+            return ADFMarkdownConversion(markdown: "", preservedNodes: [])
         }
+        return adfToMarkdown(description, siteBase: siteBaseURL)
+    }
+
+    func saveDescription(markdown: String, preservedNodes: [[String: Any]]) async -> Bool {
+        var doc = markdownToADFDoc(markdown, siteBaseURL: siteBaseURL)
+        if !preservedNodes.isEmpty {
+            var content = doc["content"] as? [[String: Any]] ?? []
+            content += preservedNodes
+            doc["content"] = content
+        }
+        return await performEdit { client in
+            try await client.editIssue(key: self.issueKey, fields: ["description": doc])
+        }
+    }
+
+    func loadLinkTypes() async {
+        guard linkTypes.isEmpty, let client else { return }
+        linkTypes = (try? await client.issueLinkTypes()) ?? []
     }
 
     func setAssignee(_ user: UserDTO?) async -> Bool {

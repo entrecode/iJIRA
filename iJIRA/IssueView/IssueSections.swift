@@ -1,17 +1,61 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Titel
+// MARK: - Titel (klick-editierbar)
 
 struct IssueTitleSection: View {
     @Bindable var model: IssueDetailModel
     let detail: IssueDetailDTO
 
+    @State private var isEditing = false
+    @State private var draft = ""
+    @State private var isSaving = false
+    @State private var hovering = false
+    @FocusState private var focused: Bool
+
     var body: some View {
-        Text(detail.fields.summary)
-            .font(.title2.weight(.semibold))
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if isEditing {
+                TextField("Titel", text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.title2.weight(.semibold))
+                    .focused($focused)
+                    .onSubmit { Task { await save() } }
+                    .onExitCommand { isEditing = false }
+                if isSaving {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Sichern") { Task { await save() } }
+                        .controlSize(.small)
+                }
+            } else {
+                Text(detail.fields.summary)
+                    .font(.title2.weight(.semibold))
+                    .textSelection(.enabled)
+                Button {
+                    draft = detail.fields.summary
+                    isEditing = true
+                    focused = true
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .opacity(hovering ? 1 : 0)
+                .help("Titel bearbeiten")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onHover { hovering = $0 }
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+        if await model.saveSummary(draft) {
+            isEditing = false
+        }
     }
 }
 
@@ -21,12 +65,15 @@ struct IssueMetaSection: View {
     @Bindable var model: IssueDetailModel
     let detail: IssueDetailDTO
 
+    @State private var showAssigneePicker = false
+    @State private var showParentPicker = false
+
     var body: some View {
         SectionCard(title: "Details", systemImage: "list.bullet.rectangle") {
             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
                 GridRow {
                     metaLabel("Assignee")
-                    userChip(detail.fields.assignee, emptyText: "Nicht zugewiesen")
+                    assigneeChip
                 }
                 GridRow {
                     metaLabel("Parent")
@@ -35,7 +82,7 @@ struct IssueMetaSection: View {
                 if let reporter = detail.fields.reporter {
                     GridRow {
                         metaLabel("Reporter")
-                        userChip(reporter, emptyText: "—")
+                        UserLabel(user: reporter)
                     }
                 }
             }
@@ -50,50 +97,285 @@ struct IssueMetaSection: View {
             .frame(minWidth: 70, alignment: .leading)
     }
 
-    @ViewBuilder
-    private func userChip(_ user: UserDTO?, emptyText: String) -> some View {
-        if let user {
+    private var assigneeChip: some View {
+        Button {
+            showAssigneePicker = true
+        } label: {
             HStack(spacing: 6) {
-                AvatarView(url: user.avatar48.flatMap { URL(string: $0) }, kind: .comment, size: 20)
-                Text(user.displayName ?? "?").font(.callout)
+                if let assignee = detail.fields.assignee {
+                    UserLabel(user: assignee)
+                } else {
+                    Text("Nicht zugewiesen").font(.callout).foregroundStyle(.tertiary)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
-        } else {
-            Text(emptyText).font(.callout).foregroundStyle(.tertiary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showAssigneePicker, arrowEdge: .bottom) {
+            PersonPickerView(
+                users: model.assignableUsers.isEmpty ? model.directory.users : model.assignableUsers,
+                allowUnassign: true,
+                currentAccountId: detail.fields.assignee?.accountId,
+                myAccountId: model.myAccountId
+            ) { user in
+                showAssigneePicker = false
+                Task { await model.setAssignee(user) }
+            }
         }
     }
 
     @ViewBuilder
     private var parentChip: some View {
-        if let parent = detail.fields.parent {
-            Button {
-                IssueWindowManager.shared.open(issueKey: parent.key)
-            } label: {
-                HStack(spacing: 6) {
-                    Text(parent.key)
-                        .font(.system(.callout, design: .monospaced).weight(.medium))
-                        .foregroundStyle(.tint)
-                    if let summary = parent.fields?.summary {
-                        Text(summary).font(.callout).lineLimit(1)
+        HStack(spacing: 6) {
+            if let parent = detail.fields.parent {
+                Button {
+                    IssueWindowManager.shared.open(issueKey: parent.key)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(parent.key)
+                            .font(.system(.callout, design: .monospaced).weight(.medium))
+                            .foregroundStyle(.tint)
+                        if let summary = parent.fields?.summary {
+                            Text(summary).font(.callout).lineLimit(1)
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .help("Parent öffnen")
+            } else {
+                Text("Kein Parent").font(.callout).foregroundStyle(.tertiary)
+            }
+            Button {
+                showParentPicker = true
+            } label: {
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Parent öffnen")
-        } else {
-            Text("Kein Parent").font(.callout).foregroundStyle(.tertiary)
+            .help("Parent ändern")
+            .popover(isPresented: $showParentPicker, arrowEdge: .bottom) {
+                IssueSuggestionPicker(
+                    prompt: "Epic/Parent suchen …",
+                    removeLabel: detail.fields.parent != nil ? "Parent entfernen" : nil
+                ) { key in
+                    showParentPicker = false
+                    Task { await model.setParent(key: key) }
+                }
+            }
         }
     }
 }
 
-// MARK: - Beschreibung
+struct UserLabel: View {
+    let user: UserDTO
+
+    var body: some View {
+        HStack(spacing: 6) {
+            AvatarView(url: user.avatar48.flatMap { URL(string: $0) }, kind: .comment, size: 20)
+            Text(user.displayName ?? "?").font(.callout)
+        }
+    }
+}
+
+// MARK: - Personen-Auswahl (Popover)
+
+/// Mac-typische Personenauswahl: Suchfeld oben, gefilterte Liste, Klick wählt.
+struct PersonPickerView: View {
+    let users: [UserDTO]
+    let allowUnassign: Bool
+    var currentAccountId: String?
+    var myAccountId: String?
+    let onSelect: (UserDTO?) -> Void
+
+    @State private var query = ""
+    @FocusState private var focused: Bool
+
+    private var filtered: [UserDTO] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return users }
+        return users.filter { ($0.displayName ?? "").lowercased().contains(q) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Person suchen …", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .padding(8)
+                .onSubmit {
+                    if let first = filtered.first { onSelect(first) }
+                }
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if allowUnassign, query.isEmpty {
+                        row(icon: "person.slash", text: "Nicht zugewiesen") { onSelect(nil) }
+                        if let mine = users.first(where: { $0.accountId == myAccountId }) {
+                            row(icon: "person.crop.circle.badge.checkmark", text: "Mir zuweisen") {
+                                onSelect(mine)
+                            }
+                        }
+                        Divider()
+                    }
+                    ForEach(filtered) { user in
+                        Button {
+                            onSelect(user)
+                        } label: {
+                            HStack(spacing: 8) {
+                                AvatarView(url: user.avatar48.flatMap { URL(string: $0) },
+                                           kind: .comment, size: 22)
+                                Text(user.displayName ?? "?").font(.callout)
+                                Spacer()
+                                if user.accountId == currentAccountId {
+                                    Image(systemName: "checkmark").font(.caption)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .frame(width: 260, height: 320)
+        .onAppear { focused = true }
+    }
+
+    private func row(icon: String, text: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon).frame(width: 22)
+                Text(text).font(.callout)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Issue-Auswahl (Popover mit Picker-Vorschlägen)
+
+struct IssueSuggestionPicker: View {
+    let prompt: String
+    var removeLabel: String? = nil
+    /// Aufruf mit Key — oder nil für „entfernen".
+    let onSelect: (String?) -> Void
+
+    @State private var query = ""
+    @State private var suggestions: [IssuePickerResponse.Suggestion] = []
+    @State private var searchTask: Task<Void, Never>?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField(prompt, text: $query)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .padding(8)
+                .onSubmit {
+                    if let key = JiraKeyParser.directKey(from: query) {
+                        onSelect(key)
+                    } else if let first = suggestions.first {
+                        onSelect(first.key)
+                    }
+                }
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let removeLabel, query.isEmpty {
+                        Button {
+                            onSelect(nil)
+                        } label: {
+                            Label(removeLabel, systemImage: "xmark.circle")
+                                .font(.callout)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                    }
+                    ForEach(suggestions) { suggestion in
+                        Button {
+                            onSelect(suggestion.key)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(suggestion.key)
+                                    .font(.system(.caption, design: .monospaced).weight(.semibold))
+                                    .foregroundStyle(.tint)
+                                Text(suggestion.summaryText ?? "")
+                                    .font(.callout)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .frame(width: 320, height: 300)
+        .onAppear { focused = true }
+        .onChange(of: query) { _, newValue in
+            searchTask?.cancel()
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            guard trimmed.count >= 2 else {
+                suggestions = []
+                return
+            }
+            searchTask = Task {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                guard !Task.isCancelled,
+                      let client = IssueWindowManager.shared.appState.currentClient() else { return }
+                let found = (try? await client.issuePicker(query: trimmed)) ?? []
+                if !Task.isCancelled { suggestions = found }
+            }
+        }
+    }
+}
+
+// MARK: - Beschreibung (editierbar)
 
 struct IssueDescriptionSection: View {
     @Bindable var model: IssueDetailModel
     let detail: IssueDetailDTO
 
+    @State private var isEditing = false
+    @State private var draft = ""
+    @State private var preservedNodes: [[String: Any]] = []
+    @State private var preservedSummary: String?
+    @State private var isSaving = false
+    @State private var mentionQuery: String?
+    @State private var editorController = MarkdownEditorController()
+
     var body: some View {
         SectionCard(title: "Beschreibung", systemImage: "text.alignleft") {
+            if isEditing {
+                editor
+            } else {
+                display
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var display: some View {
+        VStack(alignment: .leading, spacing: 8) {
             if let description = detail.fields.description {
                 ADFContentView(
                     document: description,
@@ -104,6 +386,104 @@ struct IssueDescriptionSection: View {
                 Text("Keine Beschreibung")
                     .font(.callout)
                     .foregroundStyle(.tertiary)
+            }
+            Button {
+                startEditing()
+            } label: {
+                Label("Bearbeiten", systemImage: "pencil")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            MarkdownTextEditor(text: $draft,
+                               controller: editorController,
+                               onMentionQuery: { mentionQuery = $0 })
+                .frame(minHeight: 140)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.5),
+                            in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary, lineWidth: 1))
+            MentionSuggestionsRow(directory: model.directory,
+                                  query: mentionQuery,
+                                  controller: editorController)
+            if let preservedSummary {
+                Label("Bleibt erhalten, rückt ans Ende: \(preservedSummary)",
+                      systemImage: "paperclip")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Text("Formatierung: **fett** *kursiv* `code` ``` # Liste - @Name KEY-123")
+                    .font(.caption2)
+                    .foregroundStyle(.quaternary)
+                    .lineLimit(1)
+                Spacer()
+                Button("Abbrechen") { isEditing = false }
+                    .controlSize(.small)
+                if isSaving {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Sichern") { Task { await save() } }
+                        .controlSize(.small)
+                        .keyboardShortcut(.return, modifiers: .command)
+                }
+            }
+        }
+    }
+
+    private func startEditing() {
+        let conversion = model.descriptionConversion()
+        draft = conversion.markdown
+        preservedNodes = conversion.preservedNodes
+        preservedSummary = conversion.preservedSummary
+        isEditing = true
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+        if await model.saveDescription(markdown: draft, preservedNodes: preservedNodes) {
+            isEditing = false
+        }
+    }
+}
+
+// MARK: - Mention-Vorschläge
+
+/// Vorschlagszeile unter einem Editor, sobald hinter „@" getippt wird.
+/// Klick fügt das Mention-Token an der Cursor-Position ein.
+struct MentionSuggestionsRow: View {
+    let directory: UserDirectory
+    let query: String?
+    let controller: MarkdownEditorController
+
+    var body: some View {
+        if let query {
+            let matches = directory.matching(query).prefix(5)
+            if !matches.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(Array(matches)) { user in
+                        Button {
+                            controller.insertMention(user)
+                        } label: {
+                            HStack(spacing: 5) {
+                                AvatarView(url: user.avatar48.flatMap { URL(string: $0) },
+                                           kind: .comment, size: 18)
+                                Text(user.displayName ?? "?")
+                                    .font(.caption)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.quaternary.opacity(0.4), in: Capsule())
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer(minLength: 0)
+                }
             }
         }
     }
@@ -132,7 +512,7 @@ struct IssueAttachmentsSection: View {
     }
 }
 
-// MARK: - Verlinkte Vorgänge
+// MARK: - Verlinkte Vorgänge (editierbar)
 
 struct IssueLinksSection: View {
     @Bindable var model: IssueDetailModel
@@ -143,15 +523,23 @@ struct IssueLinksSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(detail.fields.issuelinks ?? []) { link in
                     if let other = link.other {
-                        linkRow(link: link, other: other)
+                        LinkRow(model: model, link: link, other: other)
                     }
                 }
+                AddLinkButton(model: model)
             }
         }
     }
+}
 
-    private func linkRow(link: IssueLinkDTO,
-                         other: (issue: LinkedIssueDTO, label: String)) -> some View {
+private struct LinkRow: View {
+    @Bindable var model: IssueDetailModel
+    let link: IssueLinkDTO
+    let other: (issue: LinkedIssueDTO, label: String)
+
+    @State private var hovering = false
+
+    var body: some View {
         HStack(spacing: 8) {
             Text(other.label)
                 .font(.caption)
@@ -175,6 +563,86 @@ struct IssueLinksSection: View {
             if let status = other.issue.fields?.status {
                 StatusBadge(status: status)
             }
+            Button {
+                Task { await model.removeLink(id: link.id) }
+            } label: {
+                Image(systemName: "minus.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .opacity(hovering ? 1 : 0)
+            .help("Verknüpfung entfernen")
+        }
+        .onHover { hovering = $0 }
+    }
+}
+
+/// „Verknüpfung hinzufügen": Link-Typ (mit Richtung) wählen + Issue suchen.
+private struct AddLinkButton: View {
+    @Bindable var model: IssueDetailModel
+
+    @State private var showPopover = false
+    @State private var selectedOption: LinkOption?
+
+    struct LinkOption: Identifiable, Hashable {
+        let typeName: String
+        let label: String
+        let direction: IssueDetailModel.LinkDirection
+        var id: String { typeName + label }
+        static func == (lhs: LinkOption, rhs: LinkOption) -> Bool { lhs.id == rhs.id }
+        func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    }
+
+    private var options: [LinkOption] {
+        model.linkTypes.flatMap { type -> [LinkOption] in
+            guard let name = type.name else { return [] }
+            var result: [LinkOption] = []
+            // Label „blocks" = dieses Issue ist die outward-Seite des Links.
+            if let outward = type.outward {
+                result.append(LinkOption(typeName: name, label: outward, direction: .outward))
+            }
+            if let inward = type.inward, inward != type.outward {
+                result.append(LinkOption(typeName: name, label: inward, direction: .inward))
+            }
+            return result
+        }
+    }
+
+    var body: some View {
+        Button {
+            showPopover = true
+            Task { await model.loadLinkTypes() }
+        } label: {
+            Label("Verknüpfung hinzufügen", systemImage: "plus")
+                .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            VStack(spacing: 8) {
+                Picker("Beziehung", selection: $selectedOption) {
+                    Text("Beziehung wählen …").tag(LinkOption?.none)
+                    ForEach(options) { option in
+                        Text("\(model.issueKey) \(option.label) …").tag(Optional(option))
+                    }
+                }
+                .labelsHidden()
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
+
+                IssueSuggestionPicker(prompt: "Issue suchen …") { key in
+                    guard let key, let option = selectedOption else { return }
+                    showPopover = false
+                    Task {
+                        await model.addLink(typeName: option.typeName,
+                                            direction: option.direction,
+                                            otherKey: key)
+                    }
+                }
+                .disabled(selectedOption == nil)
+                .opacity(selectedOption == nil ? 0.5 : 1)
+            }
+            .frame(width: 336)
+            .padding(.bottom, 4)
         }
     }
 }
@@ -186,6 +654,8 @@ struct IssueCommentsSection: View {
 
     @State private var draft = ""
     @State private var isSending = false
+    @State private var mentionQuery: String?
+    @State private var editorController = MarkdownEditorController()
 
     var body: some View {
         SectionCard(title: "Kommentare (\(model.comments.count))", systemImage: "text.bubble") {
@@ -207,7 +677,9 @@ struct IssueCommentsSection: View {
         VStack(alignment: .leading, spacing: 6) {
             Divider()
             ZStack(alignment: .topLeading) {
-                MarkdownTextEditor(text: $draft)
+                MarkdownTextEditor(text: $draft,
+                                   controller: editorController,
+                                   onMentionQuery: { mentionQuery = $0 })
                     .frame(height: 76)
                 if draft.isEmpty {
                     Text("Kommentieren… (`code`, **fett**, *kursiv*, @Name, ONE-123)")
@@ -218,6 +690,9 @@ struct IssueCommentsSection: View {
                         .allowsHitTesting(false)
                 }
             }
+            MentionSuggestionsRow(directory: model.directory,
+                                  query: mentionQuery,
+                                  controller: editorController)
             HStack {
                 Spacer()
                 if isSending { ProgressView().controlSize(.small) }

@@ -139,4 +139,11 @@ struct ADFAttrs: Codable, Sendable {
     let type: String?
     /// codeBlock-Sprache.
     let language: String?
+    // Media-Roundtrip: ohne diese Attribute würde ein re-encodeter
+    /// Media-Knoten beim Speichern der Beschreibung kaputtgehen.
+    let collection: String?
+    let width: Double?
+    let height: Double?
+    let occurrenceKey: String?
+    let layout: String?
 }

@@ -143,6 +143,11 @@ final class AppState {
         return activeClient
     }
 
+    /// Basis-URL der Site (für Ticket-Karten-Links u. Ä.).
+    var siteBaseURL: URL? {
+        currentClient()?.baseURL ?? normalizedBaseURL()
+    }
+
     func issueWebURL(_ key: String, commentId: String? = nil) -> String {
         guard let base = activeClient?.baseURL ?? normalizedBaseURL() else { return "" }
         var string = base.absoluteString + "/browse/" + key

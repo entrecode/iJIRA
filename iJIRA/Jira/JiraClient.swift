@@ -83,6 +83,20 @@ struct JiraClient: Sendable {
             as: CommentsResponse.self)
     }
 
+    /// Alle Kommentare aufsteigend (für die Detail-Ansicht), mit Seiten-Limit
+    /// als Schutz vor Monster-Issues.
+    func allComments(issueKey: String, pageSize: Int = 100, maxPages: Int = 5) async throws -> [CommentDTO] {
+        var all: [CommentDTO] = []
+        for _ in 0..<maxPages {
+            let response: CommentsResponse = try await get(
+                "rest/api/3/issue/\(issueKey)/comment?orderBy=created&startAt=\(all.count)&maxResults=\(pageSize)",
+                as: CommentsResponse.self)
+            all += response.comments
+            if response.comments.isEmpty || all.count >= (response.total ?? 0) { break }
+        }
+        return all
+    }
+
     @discardableResult
     func addComment(issueKey: String, adfBody: [String: Any]) async throws -> CommentDTO {
         try await post("rest/api/3/issue/\(issueKey)/comment", json: adfBody, as: CommentDTO.self)

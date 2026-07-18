@@ -34,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushPresenter.registerCategories()
         pushPresenter.requestAuthorization()
 
+        // Issue-Detail-Fenster (öffnen aus Menüleiste, Links, Suche).
+        IssueWindowManager.configure(appState: appState)
+
         // Sync-Engine + AppKit-Hülle verdrahten.
         let engine = SyncEngine(appState: appState, store: store, push: pushPresenter)
         syncEngine = engine
@@ -59,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.onConnectionChanged = { [weak engine] connection in
             if case .connected = connection {
                 engine?.start()
+                // Personen-Verzeichnis für Assignee-/Mention-Vorschläge vorladen.
+                IssueWindowManager.shared.preloadDirectory()
             } else {
                 engine?.stop()
                 // Explizite Trennung: Baseline zurücksetzen, damit ein neuer
@@ -74,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await appState.restore() }
     }
 
+    /// Deep-Links: ijira://issue/ONE-1234 öffnet das Issue-Fenster.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            if let key = JiraKeyParser.key(from: url.absoluteString) {
+                IssueWindowManager.shared.open(issueKey: key)
+            }
+        }
+    }
+
     private func installMainMenu() {
         let mainMenu = NSMenu()
 
@@ -81,6 +95,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         mainMenu.addItem(appItem)
         let appMenu = NSMenu()
+        // ⌘W schließt das aktive Issue-Fenster (Responder-Chain).
+        appMenu.addItem(withTitle: "Fenster schließen",
+                        action: #selector(NSWindow.performClose(_:)),
+                        keyEquivalent: "w")
+        appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "iJIRA beenden",
                         action: #selector(NSApplication.terminate(_:)),
                         keyEquivalent: "q")

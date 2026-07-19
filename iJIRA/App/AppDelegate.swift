@@ -22,20 +22,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Hauptmenü installieren, damit Tastatur-Kurzbefehle (⌘C/⌘V/⌘X/⌘A,
-        // ⌘Z) in Textfeldern funktionieren. Ohne Edit-Menü verteilt macOS
-        // diese Key-Equivalents nicht – bei einem .accessory-Agent fehlt es
-        // sonst komplett. Das Menü bleibt unsichtbar (Agent hat keine
-        // Menüleiste), die Shortcuts greifen aber über die Responder-Chain.
-        installMainMenu()
+        // Vollständige Menüleiste — sichtbar, sobald die App per
+        // ActivationPolicy regulär wird; die Edit-Shortcuts greifen auch im
+        // Agent-Modus über die Responder-Chain.
+        MainMenu.install(target: self)
 
         // Notification Center: Delegate, Actions, Berechtigung.
         UNUserNotificationCenter.current().delegate = pushPresenter
         pushPresenter.registerCategories()
         pushPresenter.requestAuthorization()
 
-        // Issue-Detail-Fenster (öffnen aus Menüleiste, Links, Suche).
+        // Fenster-Infrastruktur: Issue-Einzelfenster, Hauptfenster, Settings.
         IssueWindowManager.configure(appState: appState)
+        MainWindowController.configure(appState: appState,
+                                       directory: IssueWindowManager.shared.userDirectory)
+        SettingsWindowController.configure(appState: appState)
 
         // Sync-Engine + AppKit-Hülle verdrahten.
         let engine = SyncEngine(appState: appState, store: store, push: pushPresenter)
@@ -58,6 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller?.showPopover()
         }
 
+        // Hauptfenster öffnet → Popover schließen (kein Kampf um Key-Status).
+        MainWindowController.shared.onWillShow = { [weak controller] in
+            controller?.closePopover()
+        }
+
         // Sync an den Verbindungsstatus koppeln.
         appState.onConnectionChanged = { [weak engine] connection in
             if case .connected = connection {
@@ -77,6 +83,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Vorhandene Zugangsdaten (Keychain + UserDefaults) wiederherstellen und
         // — falls vollständig — automatisch verbinden (löst dann start() aus).
         Task { await appState.restore() }
+
+        // Standard: still in der Menüleiste starten (Autostart!). Auf Wunsch
+        // direkt mit Hauptfenster.
+        if UserDefaults.standard.bool(forKey: "showWindowOnLaunch") {
+            MainWindowController.shared.show()
+        }
+    }
+
+    /// App „erneut geöffnet" (Dock-Klick, Doppelklick im Finder, Spotlight):
+    /// das ist der Moment für das Hauptfenster.
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        MainWindowController.shared.show()
+        return false
+    }
+
+    // MARK: - Menü-Actions
+
+    @objc func openSettings(_ sender: Any?) {
+        SettingsWindowController.shared.show()
+    }
+
+    @objc func showMainWindow(_ sender: Any?) {
+        MainWindowController.shared.show()
+    }
+
+    @objc func showBoardTab(_ sender: Any?) {
+        MainWindowController.shared.showBoard()
+    }
+
+    @objc func showIssueTab(_ sender: Any?) {
+        MainWindowController.shared.showIssueTab()
+    }
+
+    @objc func refreshCurrentTab(_ sender: Any?) {
+        MainWindowController.shared.refreshCurrentTab()
     }
 
     /// Deep-Links: ijira://issue/ONE-1234 öffnet das Issue-Fenster.
@@ -88,39 +130,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func installMainMenu() {
-        let mainMenu = NSMenu()
-
-        // App-Menü (mindestens „Beenden" mit ⌘Q)
-        let appItem = NSMenuItem()
-        mainMenu.addItem(appItem)
-        let appMenu = NSMenu()
-        // ⌘W schließt das aktive Issue-Fenster (Responder-Chain).
-        appMenu.addItem(withTitle: "Fenster schließen",
-                        action: #selector(NSWindow.performClose(_:)),
-                        keyEquivalent: "w")
-        appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "iJIRA beenden",
-                        action: #selector(NSApplication.terminate(_:)),
-                        keyEquivalent: "q")
-        appItem.submenu = appMenu
-
-        // Edit-Menü – liefert die Standard-Key-Equivalents an den First Responder.
-        // target = nil ⇒ Aktionen laufen über die Responder-Chain ans Textfeld.
-        let editItem = NSMenuItem()
-        mainMenu.addItem(editItem)
-        let editMenu = NSMenu(title: "Bearbeiten")
-        editItem.title = "Bearbeiten"
-        editMenu.addItem(withTitle: "Widerrufen", action: Selector(("undo:")), keyEquivalent: "z")
-        let redo = editMenu.addItem(withTitle: "Wiederholen", action: Selector(("redo:")), keyEquivalent: "z")
-        redo.keyEquivalentModifierMask = [.command, .shift]
-        editMenu.addItem(NSMenuItem.separator())
-        editMenu.addItem(withTitle: "Ausschneiden", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Einsetzen", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Alles auswählen", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        editItem.submenu = editMenu
-
-        NSApp.mainMenu = mainMenu
-    }
 }

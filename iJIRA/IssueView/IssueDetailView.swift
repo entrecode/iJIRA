@@ -1,35 +1,48 @@
 import AppKit
 import SwiftUI
 
-/// Fensterinhalt der Issue-Detail-Ansicht: konzentriert aufs Wesentliche —
-/// Titel, Key, Parent, Beschreibung, Assignee, verlinkte Vorgänge, Kommentare.
-struct IssueDetailView: View {
+/// Einzelfenster-Variante der Issue-Detail-Ansicht (⌥-Klick):
+/// eigener Header mit Suche, darunter der einbettbare Content.
+struct IssueDetailWindowView: View {
     @Bindable var model: IssueDetailModel
-
-    @State private var copiedKey = false
-    @State private var dropTargeted = false
 
     var body: some View {
         ZStack {
             WindowBackdrop().ignoresSafeArea()
             VStack(spacing: 0) {
-                IssueWindowHeader(model: model, copiedKey: $copiedKey)
+                IssueWindowHeader(model: model)
                 Divider().opacity(0.4)
-                content
+                IssueDetailContent(model: model, showsIdentityRow: false)
             }
         }
         .frame(minWidth: 560, minHeight: 480)
-        .task { await model.load() }
-        // Browse-Links (Ticket-Karten, Kommentar-Links) öffnen die Detailview
-        // statt des Browsers; alles andere geht ins System.
-        .environment(\.openURL, OpenURLAction { url in
-            if url.absoluteString.contains("/browse/"),
-               let key = JiraKeyParser.key(from: url.lastPathComponent) {
-                IssueWindowManager.shared.open(issueKey: key)
-                return .handled
-            }
-            return .systemAction
-        })
+    }
+}
+
+/// Einbettbarer Kern der Issue-Detail-Ansicht (Hauptfenster-Tab UND
+/// Einzelfenster): konzentriert aufs Wesentliche — Titel, Key, Parent,
+/// Beschreibung, Assignee, verlinkte Vorgänge, Kommentare.
+struct IssueDetailContent: View {
+    @Bindable var model: IssueDetailModel
+    /// Key/Status/Web-Link als Zeile über dem Titel zeigen (im Einzelfenster
+    /// übernimmt das der Fenster-Header).
+    var showsIdentityRow = true
+
+    @State private var dropTargeted = false
+
+    var body: some View {
+        content
+            .task(id: model.issueKey) { await model.load() }
+            // Browse-Links (Ticket-Karten, Kommentar-Links) öffnen die
+            // Detailview statt des Browsers; alles andere geht ins System.
+            .environment(\.openURL, OpenURLAction { url in
+                if url.absoluteString.contains("/browse/"),
+                   let key = JiraKeyParser.key(from: url.lastPathComponent) {
+                    IssueWindowManager.shared.open(issueKey: key)
+                    return .handled
+                }
+                return .systemAction
+            })
     }
 
     @ViewBuilder
@@ -48,6 +61,9 @@ struct IssueDetailView: View {
         } else if let detail = model.detail {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if showsIdentityRow {
+                        identityRow(detail: detail)
+                    }
                     IssueTitleSection(model: model, detail: detail)
                     IssueMetaSection(model: model, detail: detail)
                     IssueDescriptionSection(model: model, detail: detail)
@@ -75,6 +91,31 @@ struct IssueDetailView: View {
                 } else if let actionError = model.actionError {
                     ErrorToast(message: actionError) { model.actionError = nil }
                 }
+            }
+        }
+    }
+
+    /// Schmale Zeile über dem Titel: kopierbarer Key, Status, Web-Link,
+    /// „als Einzelfenster öffnen".
+    private func identityRow(detail: IssueDetailDTO) -> some View {
+        HStack(spacing: 10) {
+            IssueKeyChip(key: model.issueKey)
+            if let status = detail.fields.status {
+                StatusBadge(status: status)
+            }
+            Spacer()
+            Button {
+                IssueWindowManager.shared.open(issueKey: model.issueKey, preferWindow: true)
+            } label: {
+                Image(systemName: "macwindow.on.rectangle")
+            }
+            .buttonStyle(.borderless)
+            .help("In eigenem Fenster öffnen")
+            if let url = model.webURL {
+                Link(destination: url) {
+                    Image(systemName: "safari")
+                }
+                .help("Im Web öffnen")
             }
         }
     }
@@ -118,14 +159,13 @@ private struct UploadingToast: View {
 
 private struct IssueWindowHeader: View {
     @Bindable var model: IssueDetailModel
-    @Binding var copiedKey: Bool
 
     var body: some View {
         HStack(spacing: 10) {
             // Platz für die Ampel-Buttons (transparente Titlebar).
             Spacer().frame(width: 66)
 
-            keyChip
+            IssueKeyChip(key: model.issueKey)
 
             if let status = model.detail?.fields.status {
                 StatusBadge(status: status)
@@ -156,23 +196,29 @@ private struct IssueWindowHeader: View {
         .background(.bar)
     }
 
-    /// Issue-Key als kopierbarer Chip.
-    private var keyChip: some View {
+}
+
+/// Issue-Key als kopierbarer Chip (Klick kopiert, kurzes Häkchen-Feedback).
+struct IssueKeyChip: View {
+    let key: String
+    @State private var copied = false
+
+    var body: some View {
         Button {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(model.issueKey, forType: .string)
-            copiedKey = true
+            NSPasteboard.general.setString(key, forType: .string)
+            copied = true
             Task {
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
-                copiedKey = false
+                copied = false
             }
         } label: {
             HStack(spacing: 5) {
-                Text(model.issueKey)
+                Text(key)
                     .font(.system(.callout, design: .monospaced).weight(.semibold))
-                Image(systemName: copiedKey ? "checkmark" : "doc.on.doc")
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
                     .font(.caption)
-                    .foregroundStyle(copiedKey ? .green : .secondary)
+                    .foregroundStyle(copied ? .green : .secondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)

@@ -62,6 +62,12 @@ final class MenuBarController: NSObject {
         return NSHostingController(rootView: root)
     }
 
+    func closePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+        }
+    }
+
     @objc private func togglePopover(_ sender: Any?) {
         if popover.isShown {
             popover.performClose(sender)

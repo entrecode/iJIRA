@@ -28,17 +28,30 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
         Task { await userDirectory.preload(client: client) }
     }
 
-    func open(issueKey rawKey: String) {
+    /// Zentrale Öffnen-Routine: standardmäßig ins Hauptfenster (Tab „Issue");
+    /// mit gedrückter ⌥-Taste (oder `preferWindow: true`) als Einzelfenster.
+    func open(issueKey rawKey: String, preferWindow: Bool? = nil) {
         let key = rawKey.uppercased()
-        Log.app.info("Issue-Fenster öffnen: \(key, privacy: .public)")
+        let wantsWindow = preferWindow
+            ?? (NSApp.currentEvent?.modifierFlags.contains(.option) ?? false)
+        guard wantsWindow else {
+            MainWindowController.shared.showIssue(key: key)
+            return
+        }
+        openSeparateWindow(key: key)
+    }
+
+    private func openSeparateWindow(key: String) {
+        Log.app.info("Issue-Einzelfenster öffnen: \(key, privacy: .public)")
         if let window = windows[key] {
+            ActivationPolicy.windowBecameVisible()
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
         let model = IssueDetailModel(issueKey: key, appState: appState, directory: userDirectory)
-        let root = IssueDetailView(model: model)
+        let root = IssueDetailWindowView(model: model)
         let hosting = NSHostingController(rootView: root)
 
         let window = NSWindow(contentViewController: hosting)
@@ -46,6 +59,7 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.title = key
+        window.identifier = NSUserInterfaceItemIdentifier("issue-\(key)")
         window.isReleasedWhenClosed = false
         window.setContentSize(NSSize(width: 720, height: 780))
         window.minSize = NSSize(width: 560, height: 480)
@@ -54,6 +68,7 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
         window.delegate = self
         windows[key] = window
 
+        ActivationPolicy.windowBecameVisible()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -61,6 +76,7 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         windows = windows.filter { $0.value != window }
+        DispatchQueue.main.async { ActivationPolicy.windowClosed() }
     }
 }
 

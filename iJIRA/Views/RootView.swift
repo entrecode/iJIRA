@@ -1,4 +1,3 @@
-import ServiceManagement
 import SwiftUI
 
 /// Popover-Inhalt: Inbox (Konversationen) ⇄ Chat-Verlauf, oder Account-
@@ -9,14 +8,9 @@ struct RootView: View {
     let store: NotificationStore
     let syncEngine: SyncEngine
 
-    @State private var showSettings = false
     @State private var selectedIssue: String?
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var launchAtLoginError: String?
 
-    private let tokenURL = URL(string: "https://id.atlassian.com/manage-profile/security/api-tokens")!
-
-    private var showingConversations: Bool { appState.isConnected && !showSettings }
+    private var showingConversations: Bool { appState.isConnected }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,13 +26,14 @@ struct RootView: View {
     @ViewBuilder
     private var content: some View {
         if !showingConversations {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    statusBanner
-                    settingsForm
+            VStack(alignment: .leading, spacing: 16) {
+                statusBanner
+                Button("Einstellungen öffnen …") {
+                    SettingsWindowController.shared.show()
                 }
-                .padding(16)
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else if let issue = selectedIssue {
             ConversationView(issueKey: issue, store: store, appState: appState)
         } else {
@@ -68,14 +63,22 @@ struct RootView: View {
             if syncEngine.isSyncing {
                 ProgressView().controlSize(.small)
             }
-            if appState.isConnected && selectedIssue == nil {
+            if selectedIssue == nil {
                 Button {
-                    showSettings.toggle()
+                    MainWindowController.shared.show()
                 } label: {
-                    Image(systemName: showSettings ? "list.bullet" : "gearshape")
+                    Image(systemName: "macwindow")
                 }
                 .buttonStyle(.borderless)
-                .help(showSettings ? "Zur Inbox" : "Einstellungen")
+                .help("Hauptfenster öffnen")
+
+                Button {
+                    SettingsWindowController.shared.show()
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.borderless)
+                .help("Einstellungen")
             }
             Circle().fill(statusColor).frame(width: 9, height: 9)
         }
@@ -139,85 +142,6 @@ struct RootView: View {
         }
     }
 
-    // MARK: - Settings form
-
-    private var settingsForm: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Account")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            field(title: "Jira Site-URL") {
-                TextField("https://dein-team.atlassian.net", text: $appState.siteURLString)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            field(title: "E-Mail") {
-                TextField("name@firma.de", text: $appState.email)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            field(title: "API-Token") {
-                SecureField("API-Token", text: $appState.apiToken)
-                    .textFieldStyle(.roundedBorder)
-                Link("API-Token erstellen …", destination: tokenURL).font(.caption)
-            }
-
-            HStack {
-                Button(action: connect) {
-                    Text(appState.isConnected ? "Erneut prüfen" : "Verbinden")
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(appState.isConnecting)
-
-                if appState.isConnected {
-                    Button("Trennen", role: .destructive, action: appState.disconnect)
-                }
-            }
-            .padding(.top, 4)
-
-            Divider().padding(.vertical, 4)
-
-            Text("Allgemein")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            Toggle("Bei Anmeldung starten", isOn: $launchAtLogin)
-                .onChange(of: launchAtLogin) { _, enable in
-                    setLaunchAtLogin(enable)
-                }
-            if let error = launchAtLoginError {
-                Text(error).font(.caption2).foregroundStyle(.orange)
-            }
-        }
-    }
-
-    /// Registriert die App als Login-Item (bzw. entfernt sie wieder). Läuft
-    /// die App nicht aus /Applications (z. B. Debug-Build), kann das System
-    /// die Registrierung ablehnen — dann Toggle zurücksetzen und Fehler zeigen.
-    private func setLaunchAtLogin(_ enable: Bool) {
-        let service = SMAppService.mainApp
-        guard enable != (service.status == .enabled) else { return }
-        do {
-            if enable {
-                try service.register()
-            } else {
-                try service.unregister()
-            }
-            launchAtLoginError = nil
-        } catch {
-            launchAtLoginError = "Login-Item konnte nicht geändert werden: \(error.localizedDescription)"
-            launchAtLogin = service.status == .enabled
-        }
-    }
-
-    private func field<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            content()
-        }
-    }
-
     // MARK: - Footer
 
     private var footer: some View {
@@ -252,7 +176,4 @@ struct RootView: View {
         }
     }
 
-    private func connect() {
-        Task { await appState.connect() }
-    }
 }

@@ -1,0 +1,81 @@
+import AppKit
+import SwiftUI
+
+/// Besitzt das eine Hauptfenster (Board ⇄ Issue). Das Fenster wird beim
+/// Schließen nur ausgeblendet und lebt weiter — Wieder-Öffnen ist sofort da.
+@MainActor
+final class MainWindowController: NSObject, NSWindowDelegate {
+    private(set) static var shared: MainWindowController!
+
+    static func configure(appState: AppState, directory: UserDirectory) {
+        shared = MainWindowController(appState: appState, directory: directory)
+    }
+
+    let model: MainWindowModel
+    private var window: NSWindow?
+
+    /// Vor dem Anzeigen aufgerufen (z. B. Menüleisten-Popover schließen).
+    var onWillShow: (() -> Void)?
+
+    private init(appState: AppState, directory: UserDirectory) {
+        model = MainWindowModel(appState: appState, directory: directory)
+        super.init()
+    }
+
+    func show() {
+        onWillShow?()
+        if window == nil { window = makeWindow() }
+        ActivationPolicy.windowBecameVisible()
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func showBoard() {
+        show()
+        model.tab = .board
+    }
+
+    func showIssueTab() {
+        show()
+        model.tab = .issue
+    }
+
+    func showIssue(key: String) {
+        show()
+        model.openIssue(key)
+    }
+
+    /// ⌘R / Toolbar: aktualisiert den Inhalt des aktiven Tabs.
+    func refreshCurrentTab() {
+        switch model.tab {
+        case .issue:
+            if let key = model.currentIssueKey {
+                Task { await model.issueModel(for: key).refresh() }
+            }
+        case .board:
+            break // M6: BoardStore-Refresh
+        }
+    }
+
+    private func makeWindow() -> NSWindow {
+        let hosting = NSHostingController(rootView: MainWindowView(model: model))
+        let window = NSWindow(contentViewController: hosting)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.title = "iJIRA"
+        window.identifier = NSUserInterfaceItemIdentifier("main")
+        window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 1080, height: 760))
+        window.minSize = NSSize(width: 900, height: 640)
+        window.center()
+        window.setFrameAutosaveName("MainWindow")
+        window.delegate = self
+        return window
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // Verzögert prüfen — beim Delegate-Aufruf ist das Fenster noch sichtbar.
+        DispatchQueue.main.async { ActivationPolicy.windowClosed() }
+    }
+}

@@ -35,6 +35,8 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSHumanReadableCopyright: ""
+        # App-Icon (Dock/Cmd-Tab/Finder) — erzeugt via scripts/generate-icon.swift
+        CFBundleIconFile: AppIcon
         # Deep-Link: ijira://issue/ONE-1234 öffnet das Issue-Fenster
         CFBundleURLTypes:
           - CFBundleURLName: de.entrecode.iJIRA.issue

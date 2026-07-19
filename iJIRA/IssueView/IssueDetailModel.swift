@@ -35,6 +35,12 @@ final class IssueDetailModel {
     /// Fehlermeldung der letzten Aktion (Edit/Upload/Kommentar) — für die UI.
     var actionError: String?
 
+    /// Harvest: bislang von mir auf dieses Issue geloggte Stunden
+    /// (nil = unbekannt/lädt noch).
+    private(set) var loggedHours: Double?
+    private var loggedTimeFetchedAt: Date?
+    private(set) var isLoggingTime = false
+
     init(issueKey: String, appState: AppState, directory: UserDirectory) {
         self.issueKey = issueKey
         self.appState = appState
@@ -63,6 +69,8 @@ final class IssueDetailModel {
             comments = try await commentsTask
             loadError = nil
             Log.app.info("Issue \(self.issueKey, privacy: .public) geladen: \(self.comments.count) Kommentare, \(self.attachments.count) Anhänge, \(self.detail?.fields.issuelinks?.count ?? 0) Links")
+            // Harvest-Summe parallel nachziehen (non-blocking, Nice-to-have).
+            Task { await self.refreshLoggedTime() }
             // Zuweisbare Personen im Hintergrund vorladen (fürs Dropdown).
             if assignableUsers.isEmpty {
                 assignableUsers = (try? await client.assignableUsers(issueKey: issueKey)) ?? []
@@ -185,6 +193,67 @@ final class IssueDetailModel {
             return true
         } catch {
             actionError = (error as? JiraError)?.userMessage ?? error.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: - Harvest-Zeiterfassung
+
+    /// Summe meiner Harvest-Einträge zu diesem Issue (Matching über
+    /// `external_reference_id` = numerische Jira-Issue-ID). 5-min-Cache.
+    func refreshLoggedTime(force: Bool = false) async {
+        guard let harvest = HarvestState.shared, harvest.isConfigured,
+              let harvestClient = harvest.client(), let userId = harvest.userId,
+              let issueId = detail?.id else { return }
+        if !force, let fetchedAt = loggedTimeFetchedAt,
+           Date().timeIntervalSince(fetchedAt) < 300 { return }
+        do {
+            let entries = try await harvestClient.timeEntries(externalReferenceId: issueId,
+                                                              userId: userId)
+            loggedHours = entries.reduce(0) { $0 + ($1.hours ?? 0) }
+            loggedTimeFetchedAt = Date()
+            Log.app.info("Harvest: \(self.issueKey, privacy: .public) — \(self.loggedHours ?? 0, format: .fixed(precision: 2)) h geloggt")
+        } catch {
+            // Nice-to-have: leise bleiben, Button zeigt dann „–".
+            Log.app.info("Harvest-Summe fehlgeschlagen: \((error as? HarvestError)?.userMessage ?? error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Loggt `hours` auf das fest konfigurierte Harvest-Projekt/-Task.
+    /// Notes = "KEY: Titel", verlinkt über external_reference.permalink.
+    func logTime(hours: Double) async -> Bool {
+        guard let harvest = HarvestState.shared, harvest.isConfigured,
+              let harvestClient = harvest.client(),
+              let projectId = harvest.projectId, let taskId = harvest.taskId,
+              let detail else {
+            actionError = "Harvest ist nicht vollständig konfiguriert."
+            return false
+        }
+        isLoggingTime = true
+        defer { isLoggingTime = false }
+        actionError = nil
+
+        // Der Arbeitstag zählt in Europe/Berlin — egal, wo der Mac steht.
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Europe/Berlin")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let spentDate = formatter.string(from: Date())
+
+        let projectKey = issueKey.components(separatedBy: "-").first ?? issueKey
+        let notes = "\(issueKey): \(String(detail.fields.summary.prefix(200)))"
+        var reference = ["id": detail.id, "group_id": projectKey]
+        if let webURL { reference["permalink"] = webURL.absoluteString }
+
+        do {
+            try await harvestClient.createTimeEntry(projectId: projectId, taskId: taskId,
+                                                    spentDate: spentDate, hours: hours,
+                                                    notes: notes, externalReference: reference)
+            loggedHours = (loggedHours ?? 0) + hours
+            Log.app.info("Harvest: \(hours, format: .fixed(precision: 2)) h auf \(self.issueKey, privacy: .public) geloggt")
+            return true
+        } catch {
+            actionError = (error as? HarvestError)?.userMessage ?? error.localizedDescription
             return false
         }
     }

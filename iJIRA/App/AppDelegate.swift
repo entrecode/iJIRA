@@ -33,6 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushPresenter.registerCategories()
         pushPresenter.requestAuthorization()
 
+        // Harvest-Zeiterfassung (optional, Settings-Tab).
+        HarvestState.configure()
+
         // Fenster-Infrastruktur: Issue-Einzelfenster, Hauptfenster, Settings.
         IssueWindowManager.configure(appState: appState)
         MainWindowController.configure(appState: appState,
@@ -88,10 +91,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // — falls vollständig — automatisch verbinden (löst dann start() aus).
         Task { await appState.restore() }
 
-        // Standard: still in der Menüleiste starten (Autostart!). Auf Wunsch
-        // direkt mit Hauptfenster.
+        // Beim Öffnen der App direkt das Board zeigen (abschaltbar in den
+        // Einstellungen, z. B. für stillen Autostart).
+        UserDefaults.standard.register(defaults: ["showWindowOnLaunch": true])
         if UserDefaults.standard.bool(forKey: "showWindowOnLaunch") {
-            MainWindowController.shared.show()
+            MainWindowController.shared.showBoard()
         }
     }
 

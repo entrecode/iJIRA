@@ -65,10 +65,21 @@ unten unter „Erledigt" sind umgesetzt.
   Umbau, bewusst nicht gemacht. Ggf. auf JRACLOUD-78153 (offizielles
   Feature-Ticket „Comment reactions in REST API") warten.
 
+## Erledigt (2026-07-19)
+
+- [x] **M5–M9 komplett** (Plan in [plan/README.md](plan/README.md)):
+  Hauptfenster mit Board/Issue-Umschalter + dynamischer Activation-Policy,
+  echte Menüleiste, Settings-Fenster; Board-/Backlog-Ansicht mit
+  Snapshot-Cache, Prefetch aller Boards und DnD-Statuswechsel; App-Icon
+  (Neon-Chevrons); Harvest-Zeiterfassung (external_reference-Matching,
+  15-min-Raster, Europe/Berlin).
+
 ## Offen
 
-- [ ] **M5–M9 (Hauptfenster, Board, Menüs, Icon, Harvest):** detaillierte
-  Ausarbeitung in [plan/README.md](plan/README.md) (2026-07-19).
+- [ ] **Keychain-Read blockiert den Start:** `AppState.init` liest das Token
+  synchron auf dem Main-Thread — wenn securityd nach einem Rebuild die
+  Zugriffserlaubnis abfragt, friert die App bis zur Bestätigung ein.
+  Verbesserung: Read asynchron/lazy machen, UI startet sofort.
 - [ ] **Tests:** Es gibt kein Test-Target. Kandidaten mit dem besten Nutzen:
   Cursor-/`historicalCutoff`-Logik in `SyncEngine.process`, `JiraDate.parse`,
   Changelog-Letzte-Seite-Logik (mit gemocktem Client via Protokoll),

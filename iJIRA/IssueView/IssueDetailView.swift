@@ -104,6 +104,7 @@ struct IssueDetailContent: View {
                 StatusBadge(status: status)
             }
             Spacer()
+            TimeLogButton(model: model)
             Button {
                 IssueWindowManager.shared.open(issueKey: model.issueKey, preferWindow: true)
             } label: {
@@ -175,6 +176,8 @@ private struct IssueWindowHeader: View {
 
             IssueSearchField()
                 .frame(width: 230)
+
+            TimeLogButton(model: model)
 
             Button {
                 Task { await model.refresh() }
@@ -390,7 +393,9 @@ struct ErrorToast: View {
 struct WindowBackdrop: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = .underWindowBackground
+        // .sidebar ist deutlich durchscheinender als .underWindowBackground —
+        // Desktop/Fenster dahinter schimmern durch (moderner, weniger grau).
+        view.material = .sidebar
         view.blendingMode = .behindWindow
         view.state = .followsWindowActiveState
         return view
@@ -436,7 +441,7 @@ struct SectionCard<Content: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary.opacity(0.6), lineWidth: 1))
+        .background(.background.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary.opacity(0.5), lineWidth: 1))
     }
 }

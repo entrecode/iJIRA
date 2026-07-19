@@ -9,6 +9,8 @@ struct SettingsView: View {
         TabView {
             ConnectionSettingsView(appState: appState)
                 .tabItem { Label("Verbindung", systemImage: "link") }
+            HarvestSettingsView(harvest: HarvestState.shared)
+                .tabItem { Label("Harvest", systemImage: "clock") }
             GeneralSettingsView()
                 .tabItem { Label("Allgemein", systemImage: "gearshape") }
         }
@@ -99,12 +101,119 @@ struct ConnectionSettingsView: View {
     }
 }
 
+// MARK: - Harvest
+
+struct HarvestSettingsView: View {
+    @Bindable var harvest: HarvestState
+
+    private let developersURL = URL(string: "https://id.getharvest.com/developers")!
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            status
+
+            field(title: "Personal Access Token") {
+                SecureField("Token", text: $harvest.accessToken)
+                    .textFieldStyle(.roundedBorder)
+            }
+            field(title: "Account-ID") {
+                TextField("z. B. 1234567", text: $harvest.accountId)
+                    .textFieldStyle(.roundedBorder)
+                Link("Token + Account-ID erstellen …", destination: developersURL)
+                    .font(.caption)
+            }
+
+            HStack {
+                Button(harvest.verifiedUserName == nil ? "Verbinden" : "Erneut prüfen") {
+                    Task { await harvest.verify() }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(harvest.isVerifying)
+                if harvest.isVerifying {
+                    ProgressView().controlSize(.small)
+                }
+                if harvest.verifiedUserName != nil {
+                    Button("Trennen", role: .destructive) {
+                        harvest.disconnect()
+                    }
+                }
+            }
+
+            if !harvest.assignments.isEmpty {
+                Divider().padding(.vertical, 4)
+
+                Picker("Projekt", selection: $harvest.projectId) {
+                    Text("Bitte wählen …").tag(Int?.none)
+                    ForEach(harvest.assignments) { assignment in
+                        Text(projectLabel(assignment)).tag(Optional(assignment.project.id))
+                    }
+                }
+
+                Picker("Aufgabe (Billable Type)", selection: $harvest.taskId) {
+                    Text("Bitte wählen …").tag(Int?.none)
+                    ForEach(harvest.availableTasks) { taskAssignment in
+                        Text(taskLabel(taskAssignment)).tag(Optional(taskAssignment.task.id))
+                    }
+                }
+                .disabled(harvest.projectId == nil)
+
+                Text("Gilt fix für alle Issues. Der Zeit-Button erscheint in der Issue-Ansicht, sobald beides gewählt ist.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(20)
+        .task { await harvest.loadAssignmentsIfNeeded() }
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        if let name = harvest.verifiedUserName {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("Verbunden als \(name)")
+            }
+        } else if let error = harvest.verifyError {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(error)
+            }
+        } else {
+            HStack(spacing: 8) {
+                Image(systemName: "circle.dashed").foregroundStyle(.secondary)
+                Text("Nicht verbunden").foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func projectLabel(_ assignment: HarvestProjectAssignment) -> String {
+        if let client = assignment.client?.name, !client.isEmpty {
+            return "\(client) — \(assignment.project.name)"
+        }
+        return assignment.project.name
+    }
+
+    private func taskLabel(_ taskAssignment: HarvestTaskAssignment) -> String {
+        taskAssignment.billable == true
+            ? "\(taskAssignment.task.name) (billable)"
+            : taskAssignment.task.name
+    }
+
+    private func field<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            content()
+        }
+    }
+}
+
 // MARK: - Allgemein
 
 struct GeneralSettingsView: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchAtLoginError: String?
-    @AppStorage("showWindowOnLaunch") private var showWindowOnLaunch = false
+    @AppStorage("showWindowOnLaunch") private var showWindowOnLaunch = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -116,8 +225,8 @@ struct GeneralSettingsView: View {
                 Text(error).font(.caption2).foregroundStyle(.orange)
             }
 
-            Toggle("Beim Start das Hauptfenster öffnen", isOn: $showWindowOnLaunch)
-            Text("Aus = die App startet still in der Menüleiste (empfohlen für den Autostart). Das Hauptfenster öffnet sich jederzeit über das Dock, die Menüleiste oder erneutes Öffnen der App.")
+            Toggle("Beim Start das Board-Fenster öffnen", isOn: $showWindowOnLaunch)
+            Text("Aus = die App startet still in der Menüleiste (z. B. für den Autostart). Das Fenster öffnet sich jederzeit über das Dock, die Menüleiste oder erneutes Öffnen der App.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -40,7 +40,7 @@ struct BoardColumnView: View {
         }
         .frame(width: 264)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(.quaternary.opacity(dropTargeted ? 0.45 : 0.22),
+        .background(.quaternary.opacity(dropTargeted ? 0.4 : 0.14),
                     in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
@@ -80,7 +80,7 @@ struct IssueCardView: View {
             }
         }
         .padding(10)
-        .background(.background.opacity(hovering ? 0.9 : 0.6),
+        .background(.background.opacity(hovering ? 0.8 : 0.45),
                     in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)

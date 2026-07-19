@@ -4,6 +4,7 @@ import SwiftUI
 /// immer sichtbaren Suchfeld, darunter der aktive Tab.
 struct MainWindowView: View {
     @Bindable var model: MainWindowModel
+    @Bindable var boardStore: BoardStore
 
     var body: some View {
         ZStack {
@@ -64,17 +65,11 @@ struct MainWindowView: View {
     private var content: some View {
         switch model.tab {
         case .board:
-            boardPlaceholder
+            // Greedy füllen, sonst zentriert der äußere VStack den Header mit.
+            BoardView(store: boardStore)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .issue:
             issueContent
-        }
-    }
-
-    private var boardPlaceholder: some View {
-        ContentUnavailableView {
-            Label("Board", systemImage: "rectangle.split.3x1")
-        } description: {
-            Text("Die Sprint-/Backlog-Ansicht folgt im nächsten Schritt (Plan M6).")
         }
     }
 

@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appState = AppState()
     private let store = NotificationStore()
     private lazy var pushPresenter = PushPresenter(store: store)
+    private lazy var boardStore = BoardStore(appState: appState)
     private var syncEngine: SyncEngine?
     private var menuBarController: MenuBarController?
 
@@ -35,7 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Fenster-Infrastruktur: Issue-Einzelfenster, Hauptfenster, Settings.
         IssueWindowManager.configure(appState: appState)
         MainWindowController.configure(appState: appState,
-                                       directory: IssueWindowManager.shared.userDirectory)
+                                       directory: IssueWindowManager.shared.userDirectory,
+                                       boardStore: boardStore)
         SettingsWindowController.configure(appState: appState)
 
         // Sync-Engine + AppKit-Hülle verdrahten.
@@ -65,13 +67,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Sync an den Verbindungsstatus koppeln.
-        appState.onConnectionChanged = { [weak engine] connection in
+        appState.onConnectionChanged = { [weak engine, weak self] connection in
             if case .connected = connection {
                 engine?.start()
+                self?.boardStore.start()
                 // Personen-Verzeichnis für Assignee-/Mention-Vorschläge vorladen.
                 IssueWindowManager.shared.preloadDirectory()
             } else {
                 engine?.stop()
+                self?.boardStore.stop()
                 // Explizite Trennung: Baseline zurücksetzen, damit ein neuer
                 // Account wieder still (ohne Push-Flut) startet.
                 if case .disconnected = connection {

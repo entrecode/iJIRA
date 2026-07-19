@@ -102,6 +102,80 @@ struct JiraClient: Sendable {
         try await post("rest/api/3/issue/\(issueKey)/comment", json: adfBody, as: CommentDTO.self)
     }
 
+    // MARK: - Agile (Boards, Sprints, Board-Issues)
+
+    private static let boardIssueFields = "summary,updated,status,priority,issuetype"
+
+    /// Alle sichtbaren Boards (paginiert, alle Spaces).
+    func allBoards() async throws -> [BoardDTO] {
+        var result: [BoardDTO] = []
+        for _ in 0..<10 {
+            let page: BoardsResponse = try await get(
+                "rest/agile/1.0/board?startAt=\(result.count)&maxResults=50",
+                as: BoardsResponse.self)
+            result += page.values
+            if page.isLast != false || page.values.isEmpty { break }
+        }
+        return result
+    }
+
+    func boardConfiguration(boardId: Int) async throws -> BoardConfigurationDTO {
+        try await get("rest/agile/1.0/board/\(boardId)/configuration",
+                      as: BoardConfigurationDTO.self)
+    }
+
+    func activeSprints(boardId: Int) async throws -> [SprintDTO] {
+        try await get("rest/agile/1.0/board/\(boardId)/sprint?state=active",
+                      as: SprintsResponse.self).values
+    }
+
+    /// Meine Issues im Sprint (Scrum-Boards).
+    func mySprintIssues(sprintId: Int) async throws -> [BoardIssueDTO] {
+        let jql = encodeJQL("assignee = currentUser() ORDER BY rank")
+        return try await get(
+            "rest/agile/1.0/sprint/\(sprintId)/issue?jql=\(jql)&fields=\(Self.boardIssueFields)&maxResults=100",
+            as: BoardIssuesResponse.self).issues
+    }
+
+    /// Meine Issues eines Kanban-Boards (kein Sprint; Done nur die letzten Tage).
+    func myBoardIssues(boardId: Int) async throws -> [BoardIssueDTO] {
+        let jql = encodeJQL("assignee = currentUser() AND (statusCategory != Done OR updated >= -7d) ORDER BY rank")
+        return try await get(
+            "rest/agile/1.0/board/\(boardId)/issue?jql=\(jql)&fields=\(Self.boardIssueFields)&maxResults=100",
+            as: BoardIssuesResponse.self).issues
+    }
+
+    /// Meine offenen Issues, die in keinem aktiven Sprint sind (Backlog-Liste
+    /// unter dem Board — global über alle Projekte).
+    func myOpenIssuesOutsideSprints() async throws -> [BoardIssueDTO] {
+        let body: [String: Any] = [
+            "jql": "assignee = currentUser() AND statusCategory != Done"
+                + " AND (sprint is EMPTY OR sprint not in openSprints())"
+                + " ORDER BY updated DESC",
+            "maxResults": 100,
+            "fields": Self.boardIssueFields.components(separatedBy: ","),
+        ]
+        return try await post("rest/api/3/search/jql", json: body,
+                              as: BoardIssuesResponse.self).issues
+    }
+
+    private func encodeJQL(_ jql: String) -> String {
+        jql.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? jql
+    }
+
+    // MARK: - Transitions (Statuswechsel)
+
+    func transitions(issueKey: String) async throws -> [TransitionDTO] {
+        try await get("rest/api/3/issue/\(issueKey)/transitions",
+                      as: TransitionsResponse.self).transitions
+    }
+
+    func applyTransition(issueKey: String, transitionId: String) async throws {
+        try await sendNoContent(method: "POST",
+                                path: "rest/api/3/issue/\(issueKey)/transitions",
+                                json: ["transition": ["id": transitionId]])
+    }
+
     // MARK: - Issue-Detail & Bearbeitung
 
     func issueDetail(key: String) async throws -> IssueDetailDTO {

@@ -31,11 +31,11 @@ struct StatusDTO: Decodable, Sendable {
 
 /// `key` ist "new" (To Do, grau), "indeterminate" (In Progress, blau)
 /// oder "done" (grün) — für die Status-Badge-Farbe.
-struct StatusCategoryDTO: Decodable, Sendable {
+struct StatusCategoryDTO: Codable, Sendable {
     let key: String?
 }
 
-struct IssueTypeDTO: Decodable, Sendable {
+struct IssueTypeDTO: Codable, Sendable {
     let name: String?
     let iconUrl: String?
 }

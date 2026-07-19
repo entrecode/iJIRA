@@ -7,18 +7,20 @@ import SwiftUI
 final class MainWindowController: NSObject, NSWindowDelegate {
     private(set) static var shared: MainWindowController!
 
-    static func configure(appState: AppState, directory: UserDirectory) {
-        shared = MainWindowController(appState: appState, directory: directory)
+    static func configure(appState: AppState, directory: UserDirectory, boardStore: BoardStore) {
+        shared = MainWindowController(appState: appState, directory: directory, boardStore: boardStore)
     }
 
     let model: MainWindowModel
+    let boardStore: BoardStore
     private var window: NSWindow?
 
     /// Vor dem Anzeigen aufgerufen (z. B. Menüleisten-Popover schließen).
     var onWillShow: (() -> Void)?
 
-    private init(appState: AppState, directory: UserDirectory) {
+    private init(appState: AppState, directory: UserDirectory, boardStore: BoardStore) {
         model = MainWindowModel(appState: appState, directory: directory)
+        self.boardStore = boardStore
         super.init()
     }
 
@@ -53,12 +55,12 @@ final class MainWindowController: NSObject, NSWindowDelegate {
                 Task { await model.issueModel(for: key).refresh() }
             }
         case .board:
-            break // M6: BoardStore-Refresh
+            boardStore.kickRefresh()
         }
     }
 
     private func makeWindow() -> NSWindow {
-        let hosting = NSHostingController(rootView: MainWindowView(model: model))
+        let hosting = NSHostingController(rootView: MainWindowView(model: model, boardStore: boardStore))
         let window = NSWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true

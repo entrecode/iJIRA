@@ -67,7 +67,10 @@ unten unter „Erledigt" sind umgesetzt.
 
 ## Offen
 
+- [ ] **M5–M9 (Hauptfenster, Board, Menüs, Icon, Harvest):** detaillierte
+  Ausarbeitung in [plan/README.md](plan/README.md) (2026-07-19).
 - [ ] **Tests:** Es gibt kein Test-Target. Kandidaten mit dem besten Nutzen:
   Cursor-/`historicalCutoff`-Logik in `SyncEngine.process`, `JiraDate.parse`,
-  Changelog-Letzte-Seite-Logik (mit gemocktem Client via Protokoll).
+  Changelog-Letzte-Seite-Logik (mit gemocktem Client via Protokoll),
+  neu: Markdown↔ADF-Roundtrip.
 - [ ] **Bell-Feed (M4 aus KONZEPT.md):** weiterhin offen, bewusst nicht begonnen.

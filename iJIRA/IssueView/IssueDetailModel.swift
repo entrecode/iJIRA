@@ -199,24 +199,27 @@ final class IssueDetailModel {
 
     // MARK: - Harvest-Zeiterfassung
 
-    /// Summe meiner Harvest-Einträge zu diesem Issue (Matching über
-    /// `external_reference_id` = numerische Jira-Issue-ID). 5-min-Cache.
+    /// Summe meiner Harvest-Einträge zu diesem Issue. Zählt Einträge mit
+    /// passender `external_reference` (von iJIRA/offiziellem Plugin) UND
+    /// solche, deren Notes den Jira-Key enthalten — damit auch direkt in
+    /// Harvest erfasste Zeit erscheint. 5-min-Cache (geteilt in HarvestState).
     func refreshLoggedTime(force: Bool = false) async {
         guard let harvest = HarvestState.shared, harvest.isConfigured,
-              let harvestClient = harvest.client(), let userId = harvest.userId,
               let issueId = detail?.id else { return }
         if !force, let fetchedAt = loggedTimeFetchedAt,
            Date().timeIntervalSince(fetchedAt) < 300 { return }
-        do {
-            let entries = try await harvestClient.timeEntries(externalReferenceId: issueId,
-                                                              userId: userId)
-            loggedHours = entries.reduce(0) { $0 + ($1.hours ?? 0) }
-            loggedTimeFetchedAt = Date()
-            Log.app.info("Harvest: \(self.issueKey, privacy: .public) — \(self.loggedHours ?? 0, format: .fixed(precision: 2)) h geloggt")
-        } catch {
-            // Nice-to-have: leise bleiben, Button zeigt dann „–".
-            Log.app.info("Harvest-Summe fehlgeschlagen: \((error as? HarvestError)?.userMessage ?? error.localizedDescription, privacy: .public)")
-        }
+        guard let entries = await harvest.timeEntries(force: force) else { return }
+
+        let pattern = "\\b" + NSRegularExpression.escapedPattern(for: issueKey) + "\\b"
+        let keyRegex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+        loggedHours = entries.filter { entry in
+            if entry.externalReference?.id == issueId { return true }
+            guard let notes = entry.notes, let keyRegex else { return false }
+            let range = NSRange(notes.startIndex..., in: notes)
+            return keyRegex.firstMatch(in: notes, range: range) != nil
+        }.reduce(0) { $0 + ($1.hours ?? 0) }
+        loggedTimeFetchedAt = Date()
+        Log.app.info("Harvest: \(self.issueKey, privacy: .public) — \(self.loggedHours ?? 0, format: .fixed(precision: 2)) h geloggt")
     }
 
     /// Loggt `hours` auf das fest konfigurierte Harvest-Projekt/-Task.
@@ -246,9 +249,11 @@ final class IssueDetailModel {
         if let webURL { reference["permalink"] = webURL.absoluteString }
 
         do {
-            try await harvestClient.createTimeEntry(projectId: projectId, taskId: taskId,
-                                                    spentDate: spentDate, hours: hours,
-                                                    notes: notes, externalReference: reference)
+            let entry = try await harvestClient.createTimeEntry(
+                projectId: projectId, taskId: taskId,
+                spentDate: spentDate, hours: hours,
+                notes: notes, externalReference: reference)
+            harvest.noteLoggedEntry(entry)
             loggedHours = (loggedHours ?? 0) + hours
             Log.app.info("Harvest: \(hours, format: .fixed(precision: 2)) h auf \(self.issueKey, privacy: .public) geloggt")
             return true

@@ -10,7 +10,10 @@ struct MainWindowView: View {
         ZStack {
             WindowBackdrop().ignoresSafeArea()
             VStack(spacing: 0) {
+                // zIndex hebt das Such-Vorschläge-Overlay über den Tab-Inhalt
+                // (spätere VStack-Geschwister lägen sonst darüber).
                 header
+                    .zIndex(10)
                 Divider().opacity(0.4)
                 content
             }

@@ -6,17 +6,48 @@ import SwiftUI
 struct BoardView: View {
     @Bindable var store: BoardStore
 
+    /// Höhe des Backlog-Bereichs — per Drag am Trenner verstellbar.
+    /// (Kein VSplitView: NSSplitView zeichnet einen opaken Hintergrund und
+    /// würde den transparenten Fenster-Backdrop verdecken.)
+    @AppStorage("backlogHeight") private var backlogHeight = 240.0
+    @State private var dragStartHeight: Double?
+
     var body: some View {
         if store.boards.isEmpty {
             emptyState
         } else {
-            VSplitView {
+            VStack(spacing: 0) {
                 boardArea
-                    .frame(minHeight: 240)
+                    .frame(maxHeight: .infinity)
+                splitHandle
                 backlogArea
-                    .frame(minHeight: 120)
+                    .frame(height: max(120, backlogHeight))
             }
         }
+    }
+
+    /// Schmaler, ziehbarer Trenner zwischen Board und Backlog.
+    private var splitHandle: some View {
+        ZStack {
+            Divider()
+            Capsule()
+                .fill(.quaternary)
+                .frame(width: 36, height: 4)
+        }
+        .frame(height: 9)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if dragStartHeight == nil { dragStartHeight = backlogHeight }
+                    let proposed = (dragStartHeight ?? backlogHeight) - value.translation.height
+                    backlogHeight = min(max(120, proposed), 600)
+                }
+                .onEnded { _ in dragStartHeight = nil }
+        )
     }
 
     private var emptyState: some View {

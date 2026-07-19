@@ -15,6 +15,8 @@ struct SettingsView: View {
                 .tabItem { Label("Allgemein", systemImage: "gearshape") }
         }
         .frame(width: 460)
+        // Ohne Luft nach oben schneidet die Fensterkante die Tab-Buttons an.
+        .padding(.top, 12)
         .padding(.bottom, 8)
     }
 }

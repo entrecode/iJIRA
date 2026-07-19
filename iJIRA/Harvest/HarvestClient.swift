@@ -37,15 +37,17 @@ struct HarvestClient: Sendable {
         return all
     }
 
-    /// Meine Zeiteinträge zu einem Jira-Issue — Matching über die
-    /// `external_reference`-ID (Konvention des offiziellen Jira-Plugins).
-    func timeEntries(externalReferenceId: String, userId: Int) async throws -> [HarvestTimeEntry] {
+    /// Meine Zeiteinträge im konfigurierten Projekt (ab `fromISODate`).
+    /// Das Issue-Matching passiert lokal (external_reference ODER Jira-Key in
+    /// den Notes) — so zählen auch extern in Harvest erfasste Zeiten.
+    func projectTimeEntries(projectId: Int, userId: Int,
+                            fromISODate: String) async throws -> [HarvestTimeEntry] {
         var all: [HarvestTimeEntry] = []
         var page = 1
-        for _ in 0..<10 {
+        for _ in 0..<20 {
             let response: HarvestTimeEntriesResponse = try await request(
                 "GET",
-                "time_entries?external_reference_id=\(externalReferenceId)&user_id=\(userId)&per_page=100&page=\(page)",
+                "time_entries?project_id=\(projectId)&user_id=\(userId)&from=\(fromISODate)&per_page=100&page=\(page)",
                 as: HarvestTimeEntriesResponse.self)
             all += response.timeEntries
             guard response.nextPage != nil else { break }
@@ -181,4 +183,10 @@ struct HarvestTimeEntry: Decodable, Sendable {
     let hours: Double?
     let spentDate: String?
     let notes: String?
+    let externalReference: HarvestExternalReference?
+}
+
+struct HarvestExternalReference: Decodable, Sendable {
+    let id: String?
+    let permalink: String?
 }

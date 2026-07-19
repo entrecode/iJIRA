@@ -10,7 +10,9 @@ struct IssueDetailWindowView: View {
         ZStack {
             WindowBackdrop().ignoresSafeArea()
             VStack(spacing: 0) {
+                // zIndex: Such-Vorschläge über dem Inhalt halten.
                 IssueWindowHeader(model: model)
+                    .zIndex(10)
                 Divider().opacity(0.4)
                 IssueDetailContent(model: model, showsIdentityRow: false)
             }
@@ -105,17 +107,15 @@ struct IssueDetailContent: View {
             }
             Spacer()
             TimeLogButton(model: model)
-            Button {
-                IssueWindowManager.shared.open(issueKey: model.issueKey, preferWindow: true)
-            } label: {
-                Image(systemName: "macwindow.on.rectangle")
-            }
-            .buttonStyle(.borderless)
-            .help("In eigenem Fenster öffnen")
             if let url = model.webURL {
-                Link(destination: url) {
+                // Bewusst KEIN Link: der openURL-Interceptor dieser View fängt
+                // Browse-URLs ab (und würde nur das Issue selbst „öffnen").
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
                     Image(systemName: "safari")
                 }
+                .buttonStyle(.borderless)
                 .help("Im Web öffnen")
             }
         }
@@ -337,7 +337,11 @@ struct IssueSearchField: View {
             try? await Task.sleep(nanoseconds: 250_000_000)
             guard !Task.isCancelled,
                   let client = IssueWindowManager.shared.appState.currentClient() else { return }
-            let found = (try? await client.issuePicker(query: trimmed)) ?? []
+            var found = (try? await client.issuePicker(query: trimmed)) ?? []
+            // Picker leer → JQL-Volltextsuche (Summary/Beschreibung/Kommentare).
+            if found.isEmpty, !Task.isCancelled {
+                found = (try? await client.searchIssuesByText(trimmed)) ?? []
+            }
             if !Task.isCancelled {
                 suggestions = found
             }

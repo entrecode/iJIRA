@@ -222,6 +222,26 @@ struct JiraClient: Sendable {
         return response.allSuggestions
     }
 
+    /// Volltextsuche als Fallback, wenn der Picker nichts liefert
+    /// (`text ~` durchsucht Summary, Beschreibung und Kommentare).
+    func searchIssuesByText(_ text: String, maxResults: Int = 8) async throws -> [IssuePickerResponse.Suggestion] {
+        let sanitized = text.replacingOccurrences(of: "\"", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sanitized.isEmpty else { return [] }
+        let body: [String: Any] = [
+            "jql": "text ~ \"\(sanitized)*\" ORDER BY updated DESC",
+            "maxResults": maxResults,
+            "fields": ["summary"],
+        ]
+        let response: BoardIssuesResponse = try await post("rest/api/3/search/jql",
+                                                           json: body,
+                                                           as: BoardIssuesResponse.self)
+        return response.issues.map {
+            IssuePickerResponse.Suggestion(id: Int($0.id), key: $0.key,
+                                           summaryText: $0.fields.summary)
+        }
+    }
+
     // MARK: - Issue-Links
 
     func issueLinkTypes() async throws -> [IssueLinkTypeDTO] {

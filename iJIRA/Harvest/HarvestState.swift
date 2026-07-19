@@ -116,6 +116,45 @@ final class HarvestState {
         }
     }
 
+    // MARK: - Zeiteinträge (geteilter Cache für alle Issue-Ansichten)
+
+    /// Alle meine Einträge im konfigurierten Projekt der letzten 12 Monate.
+    /// Ein Fetch versorgt alle Issues — das Matching (external_reference oder
+    /// Jira-Key in den Notes) passiert lokal, damit auch extern in Harvest
+    /// erfasste Zeit gezählt wird.
+    private var cachedEntries: [HarvestTimeEntry] = []
+    private var entriesFetchedAt: Date?
+
+    func timeEntries(force: Bool = false) async -> [HarvestTimeEntry]? {
+        guard isConfigured, let client = client(),
+              let userId, let projectId else { return nil }
+        if !force, let fetchedAt = entriesFetchedAt,
+           Date().timeIntervalSince(fetchedAt) < 300 {
+            return cachedEntries
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Europe/Berlin")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let from = formatter.string(from: Date().addingTimeInterval(-365 * 24 * 3600))
+        do {
+            cachedEntries = try await client.projectTimeEntries(projectId: projectId,
+                                                                userId: userId,
+                                                                fromISODate: from)
+            entriesFetchedAt = Date()
+            Log.app.info("Harvest: \(self.cachedEntries.count) Zeiteinträge geladen")
+            return cachedEntries
+        } catch {
+            Log.app.info("Harvest-Einträge fehlgeschlagen: \((error as? HarvestError)?.userMessage ?? error.localizedDescription, privacy: .public)")
+            return entriesFetchedAt != nil ? cachedEntries : nil
+        }
+    }
+
+    /// Frisch geloggten Eintrag in den Cache aufnehmen (kein Refetch nötig).
+    func noteLoggedEntry(_ entry: HarvestTimeEntry) {
+        cachedEntries.append(entry)
+    }
+
     /// Für die Settings-Ansicht: Picker-Daten nachladen, wenn bereits
     /// konfiguriert (Namen statt nackter IDs anzeigen).
     func loadAssignmentsIfNeeded() async {

@@ -18,6 +18,9 @@ final class MainWindowModel {
     }
     private(set) var currentIssueKey: String?
 
+    /// „Neues Issue"-Dialog (Sheet).
+    var showCreateSheet = false
+
     private let appState: AppState
     private let directory: UserDirectory
     private var issueModels: [String: IssueDetailModel] = [:]

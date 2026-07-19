@@ -176,6 +176,58 @@ struct JiraClient: Sendable {
                                 json: ["transition": ["id": transitionId]])
     }
 
+    // MARK: - Issue anlegen
+
+    func visibleProjects(maxResults: Int = 200) async throws -> [ProjectSummaryDTO] {
+        try await get("rest/api/3/project/search?maxResults=\(maxResults)&orderBy=name",
+                      as: ProjectSearchResponse.self).values
+    }
+
+    func createMetaIssueTypes(projectKey: String) async throws -> [CreateMetaIssueType] {
+        try await get("rest/api/3/issue/createmeta/\(projectKey)/issuetypes?maxResults=50",
+                      as: CreateMetaIssueTypesResponse.self).issueTypes
+    }
+
+    func projectComponents(projectKey: String) async throws -> [ProjectComponentDTO] {
+        try await get("rest/api/3/project/\(projectKey)/components",
+                      as: [ProjectComponentDTO].self)
+    }
+
+    func allFields() async throws -> [FieldDTO] {
+        try await get("rest/api/3/field", as: [FieldDTO].self)
+    }
+
+    /// Team-Vorschläge über die JQL-Autocomplete-API (das Team-Feld hat keine
+    /// createmeta-allowedValues; dieser Weg liefert ID + Name).
+    func teamSuggestions(fieldName: String, query: String) async throws -> [JQLSuggestionsResponse.Result] {
+        let field = fieldName.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? fieldName
+        let value = query.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? query
+        return try await get(
+            "rest/api/3/jql/autocompletedata/suggestions?fieldName=\(field)&fieldValue=\(value)",
+            as: JQLSuggestionsResponse.self).results
+    }
+
+    /// Issue anlegen. Validierungsfehler (400) werden mit den Feld-Meldungen
+    /// aus dem Body als `JiraError.api` durchgereicht.
+    func createIssue(fields: [String: Any]) async throws -> CreatedIssueDTO {
+        var request = try makeRequest("rest/api/3/issue")
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["fields": fields])
+        let (data, response) = try await Self.session.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode == 400,
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            var messages = (json["errorMessages"] as? [String]) ?? []
+            if let fieldErrors = json["errors"] as? [String: String] {
+                messages += fieldErrors.map { "\($0.key): \($0.value)" }
+            }
+            if !messages.isEmpty {
+                throw JiraError.api(message: messages.joined(separator: " · "))
+            }
+        }
+        return try decode(CreatedIssueDTO.self, data: data, response: response)
+    }
+
     // MARK: - Issue-Detail & Bearbeitung
 
     func issueDetail(key: String) async throws -> IssueDetailDTO {
@@ -402,9 +454,13 @@ enum JiraError: Error {
     case notFound
     case rateLimited(retryAfter: TimeInterval?)
     case http(status: Int)
+    /// Validierungs-/Fachfehler mit Meldung aus dem Response-Body.
+    case api(message: String)
 
     var userMessage: String {
         switch self {
+        case .api(let message):
+            return message
         case .invalidResponse:
             return "Unerwartete Antwort vom Server."
         case .decoding:

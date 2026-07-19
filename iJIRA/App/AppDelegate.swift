@@ -36,6 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Harvest-Zeiterfassung (optional, Settings-Tab).
         HarvestState.configure()
 
+        // Ticket-Erstellung (Kataloge + Vorbelegung).
+        CreateIssueService.configure(appState: appState)
+
         // Fenster-Infrastruktur: Issue-Einzelfenster, Hauptfenster, Settings.
         IssueWindowManager.configure(appState: appState)
         MainWindowController.configure(appState: appState,
@@ -76,6 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.boardStore.start()
                 // Personen-Verzeichnis für Assignee-/Mention-Vorschläge vorladen.
                 IssueWindowManager.shared.preloadDirectory()
+                // Projekt-/Team-Kataloge für den Neues-Issue-Dialog vorladen.
+                Task { await CreateIssueService.shared.preload() }
             } else {
                 engine?.stop()
                 self?.boardStore.stop()
@@ -111,6 +116,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openSettings(_ sender: Any?) {
         SettingsWindowController.shared.show()
+    }
+
+    @objc func newIssue(_ sender: Any?) {
+        MainWindowController.shared.showCreateIssue()
     }
 
     @objc func showMainWindow(_ sender: Any?) {

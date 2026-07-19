@@ -39,6 +39,11 @@ enum MainMenu {
         let fileItem = NSMenuItem()
         main.addItem(fileItem)
         let fileMenu = NSMenu(title: "Ablage")
+        let newIssue = NSMenuItem(title: "Neues Issue …",
+                                  action: #selector(AppDelegate.newIssue(_:)), keyEquivalent: "n")
+        newIssue.target = target
+        fileMenu.addItem(newIssue)
+        fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Fenster schließen",
                          action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         fileItem.submenu = fileMenu

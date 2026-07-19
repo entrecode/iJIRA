@@ -47,6 +47,11 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         model.openIssue(key)
     }
 
+    func showCreateIssue() {
+        show()
+        model.showCreateSheet = true
+    }
+
     /// ⌘R / Toolbar: aktualisiert den Inhalt des aktiven Tabs.
     func refreshCurrentTab() {
         switch model.tab {

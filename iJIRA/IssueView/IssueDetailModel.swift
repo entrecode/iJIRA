@@ -71,6 +71,9 @@ final class IssueDetailModel {
             Log.app.info("Issue \(self.issueKey, privacy: .public) geladen: \(self.comments.count) Kommentare, \(self.attachments.count) Anhänge, \(self.detail?.fields.issuelinks?.count ?? 0) Links")
             // Harvest-Summe parallel nachziehen (non-blocking, Nice-to-have).
             Task { await self.refreshLoggedTime() }
+            // Projekt/Typ/Team/Komponenten als „zuletzt angesehen"-Vorbelegung
+            // für den Neues-Issue-Dialog übernehmen.
+            Task { await CreateIssueService.shared.captureViewedIssue(key: self.issueKey) }
             // Zuweisbare Personen im Hintergrund vorladen (fürs Dropdown).
             if assignableUsers.isEmpty {
                 assignableUsers = (try? await client.assignableUsers(issueKey: issueKey)) ?? []

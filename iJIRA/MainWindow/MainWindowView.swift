@@ -19,6 +19,11 @@ struct MainWindowView: View {
             }
         }
         .frame(minWidth: 900, minHeight: 640)
+        .sheet(isPresented: $model.showCreateSheet) {
+            CreateIssueView(service: CreateIssueService.shared) { key in
+                model.openIssue(key)
+            }
+        }
     }
 
     // MARK: - Header
@@ -40,6 +45,14 @@ struct MainWindowView: View {
 
             IssueSearchField()
                 .frame(width: 240)
+
+            Button {
+                model.showCreateSheet = true
+            } label: {
+                Image(systemName: "square.and.pencil")
+            }
+            .buttonStyle(.borderless)
+            .help("Neues Issue (⌘N)")
 
             Button {
                 MainWindowController.shared.refreshCurrentTab()

@@ -100,15 +100,17 @@ final class CreateIssueService {
     /// Beim Ansehen eines Issues dessen Projekt/Typ/Team/Komponenten als
     /// „zuletzt angesehen"-Vorbelegung übernehmen (ein kleiner Raw-Request,
     /// weil das Team-Feld eine dynamische Custom-Field-ID hat).
-    func captureViewedIssue(key: String) async {
+    /// Gibt den Team-Namen des Issues zurück (für die Detail-Ansicht).
+    @discardableResult
+    func captureViewedIssue(key: String) async -> String? {
         guard let client = appState.currentClient(),
-              let base = appState.siteBaseURL else { return }
+              let base = appState.siteBaseURL else { return nil }
         var fields = "project,components,issuetype"
         if let teamFieldId { fields += ",\(teamFieldId)" }
         guard let data = try? await client.fetchData(
                   from: base.absoluteString + "/rest/api/3/issue/\(key)?fields=\(fields)"),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let fieldsDict = json["fields"] as? [String: Any] else { return }
+              let fieldsDict = json["fields"] as? [String: Any] else { return nil }
 
         var defaults = Defaults()
         defaults.projectKey = (fieldsDict["project"] as? [String: Any])?["key"] as? String
@@ -126,6 +128,7 @@ final class CreateIssueService {
         }
         lastViewed = defaults
         Self.persist(defaults, key: Self.lastViewedKey)
+        return defaults.teamName
     }
 
     // MARK: - Anlegen

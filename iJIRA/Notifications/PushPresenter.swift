@@ -21,6 +21,9 @@ final class PushPresenter: NSObject, UNUserNotificationCenterDelegate {
     /// Ab wie vielen neuen Einträgen wir zu einer Sammel-Notification bündeln.
     private static let coalesceThreshold = 5
 
+    /// Öffnet die Menüleisten-Konversation eines Issues (Default-Tap).
+    var openConversation: (@MainActor (String) -> Void)?
+
     init(store: NotificationStore) {
         self.store = store
         super.init()
@@ -71,6 +74,7 @@ final class PushPresenter: NSObject, UNUserNotificationCenterDelegate {
         content.userInfo = [
             "dedupKey": notification.dedupKey,
             "webURL": notification.webURLString,
+            "issueKey": notification.issueKey,
         ]
         // dedupKey als Request-ID: verhindert Dubletten auch auf Systemebene.
         let request = UNNotificationRequest(identifier: notification.dedupKey,
@@ -108,25 +112,42 @@ final class PushPresenter: NSObject, UNUserNotificationCenterDelegate {
         let identifier = response.notification.request.identifier
         let urlString = userInfo["webURL"] as? String
         let dedupKey = userInfo["dedupKey"] as? String
+        let issueKey = userInfo["issueKey"] as? String
+        // Die Aktivierung durch den Notification-Tap löst ein Reopen aus,
+        // das sonst das Hauptfenster öffnen würde — kurz unterdrücken.
+        ReopenSuppressor.suppress(for: 2)
         Task { @MainActor in
             if identifier == "summary" {
                 self.openPopover?()
             } else {
-                self.handle(action: action, urlString: urlString, dedupKey: dedupKey)
+                self.handle(action: action, urlString: urlString,
+                            dedupKey: dedupKey, issueKey: issueKey)
             }
         }
         completionHandler()
     }
 
     @MainActor
-    private func handle(action: String, urlString: String?, dedupKey: String?) {
+    private func handle(action: String, urlString: String?, dedupKey: String?, issueKey: String?) {
         switch action {
         case Self.actionRead:
             markRead(dedupKey)
-        default:
-            // Standard-Tap oder „Im Web öffnen": Issue öffnen + als gelesen markieren.
+        case Self.actionOpen:
+            // Explizit „Im Web öffnen".
             if let urlString, let url = URL(string: urlString) {
                 NSWorkspace.shared.open(url)
+            }
+            markRead(dedupKey)
+        default:
+            // Standard-Tap: Menüleisten-Popover mit der Konversation öffnen.
+            // Fallback für ältere zugestellte Notifications ohne issueKey:
+            // aus dem dedupKey ("comment:KEY:id") ableiten.
+            let key = issueKey
+                ?? dedupKey.flatMap { $0.split(separator: ":").dropFirst().first.map(String.init) }
+            if let key {
+                openConversation?(key)
+            } else {
+                openPopover?()
             }
             markRead(dedupKey)
         }

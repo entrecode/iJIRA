@@ -1,6 +1,30 @@
 import AppKit
 import SwiftUI
 
+/// Navigations-Wünsche ans Popover (z. B. „öffne Konversation X" nach einem
+/// Notification-Tap). Beobachtbar, damit die RootView auch bei bereits
+/// offenem Popover reagiert.
+@MainActor
+@Observable
+final class PopoverNavigation {
+    var pendingIssueKey: String?
+}
+
+/// Unterdrückt das Reopen-Handling (Hauptfenster öffnen) kurzzeitig —
+/// die App-Aktivierung durch einen Notification-Tap soll NICHT zusätzlich
+/// das Hauptfenster hochziehen.
+enum ReopenSuppressor {
+    nonisolated(unsafe) private static var until = Date.distantPast
+
+    static func suppress(for seconds: TimeInterval) {
+        until = Date().addingTimeInterval(seconds)
+    }
+
+    static var isSuppressed: Bool {
+        Date() < until
+    }
+}
+
 /// Besitzt das `NSStatusItem` (inkl. ungelesen-Badge) und den `NSPopover`,
 /// der die SwiftUI-Oberfläche via `NSHostingController` hostet.
 @MainActor
@@ -12,6 +36,7 @@ final class MenuBarController: NSObject {
     private let syncEngine: SyncEngine
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
+    private let navigation = PopoverNavigation()
     private var resignActiveObserver: NSObjectProtocol?
     private var spaceKeyMonitor: Any?
 
@@ -108,9 +133,19 @@ final class MenuBarController: NSObject {
     /// Ein frischer Controller erzwingt einen Render-Pass mit aktueller Uhr und
     /// aktuellem `@Query`.
     private func makeContentViewController() -> NSViewController {
-        let root = RootView(appState: appState, store: store, syncEngine: syncEngine)
+        let root = RootView(appState: appState, store: store, syncEngine: syncEngine,
+                            navigation: navigation)
             .modelContainer(store.container)
         return NSHostingController(rootView: root)
+    }
+
+    /// Öffnet das Popover direkt mit der Konversation eines Issues
+    /// (Notification-Tap).
+    func showConversation(issueKey: String) {
+        navigation.pendingIssueKey = issueKey
+        if !popover.isShown {
+            openPopover()
+        }
     }
 
     func closePopover() {

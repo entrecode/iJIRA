@@ -72,7 +72,13 @@ struct MainWindowView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.bar)
+        .background {
+            // Ganzer Header zieht das Fenster (nicht nur die schmale Titlebar).
+            ZStack {
+                Rectangle().fill(.bar)
+                WindowDragArea()
+            }
+        }
     }
 
     // MARK: - Inhalt

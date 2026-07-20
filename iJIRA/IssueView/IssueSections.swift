@@ -70,20 +70,31 @@ struct IssueMetaSection: View {
 
     var body: some View {
         SectionCard(title: "Details", systemImage: "list.bullet.rectangle") {
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+            // Zwei Spalten: links Personen/Hierarchie, rechts Klassifizierung.
+            Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 10) {
                 GridRow {
                     metaLabel("Assignee")
                     assigneeChip
+                    metaLabel("Issue-Type")
+                    issueTypeValue
+                }
+                GridRow {
+                    metaLabel("Reporter")
+                    reporterValue
+                    metaLabel("Components")
+                    textValue(detail.fields.components?.map(\.name).joined(separator: ", "))
                 }
                 GridRow {
                     metaLabel("Parent")
                     parentChip
+                    metaLabel("Labels")
+                    textValue(detail.fields.labels?.joined(separator: ", "))
                 }
-                if let reporter = detail.fields.reporter {
-                    GridRow {
-                        metaLabel("Reporter")
-                        UserLabel(user: reporter)
-                    }
+                GridRow {
+                    metaLabel("Team")
+                    textValue(model.teamName)
+                    metaLabel("Fix Version")
+                    textValue(detail.fields.fixVersions?.compactMap(\.name).joined(separator: ", "))
                 }
             }
         }
@@ -95,6 +106,40 @@ struct IssueMetaSection: View {
             .foregroundStyle(.secondary)
             .gridColumnAlignment(.leading)
             .frame(minWidth: 70, alignment: .leading)
+    }
+
+    /// Textwert mit „—"-Platzhalter für leere Felder.
+    @ViewBuilder
+    private func textValue(_ text: String?) -> some View {
+        if let text, !text.isEmpty {
+            Text(text)
+                .font(.callout)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text("—")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var issueTypeValue: some View {
+        HStack(spacing: 5) {
+            IssueTypeIcon(typeName: detail.fields.issuetype?.name)
+            Text(detail.fields.issuetype?.name ?? "—")
+                .font(.callout)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var reporterValue: some View {
+        if let reporter = detail.fields.reporter {
+            UserLabel(user: reporter)
+        } else {
+            Text("—").font(.callout).foregroundStyle(.tertiary)
+        }
     }
 
     private var assigneeChip: some View {

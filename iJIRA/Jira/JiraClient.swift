@@ -231,7 +231,7 @@ struct JiraClient: Sendable {
     // MARK: - Issue-Detail & Bearbeitung
 
     func issueDetail(key: String) async throws -> IssueDetailDTO {
-        let fields = "summary,description,status,assignee,reporter,parent,issuelinks,attachment,issuetype,project,updated"
+        let fields = "summary,description,status,assignee,reporter,parent,issuelinks,attachment,issuetype,project,updated,components,labels,fixVersions"
         return try await get("rest/api/3/issue/\(key)?fields=\(fields)", as: IssueDetailDTO.self)
     }
 

@@ -22,6 +22,13 @@ struct IssueDetailFields: Decodable, Sendable {
     let issuetype: IssueTypeDTO?
     let project: ProjectRefDTO?
     let updated: String?
+    let components: [ProjectComponentDTO]?
+    let labels: [String]?
+    let fixVersions: [FixVersionDTO]?
+}
+
+struct FixVersionDTO: Codable, Sendable {
+    let name: String?
 }
 
 struct StatusDTO: Decodable, Sendable {

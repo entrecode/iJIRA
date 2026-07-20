@@ -26,6 +26,9 @@ final class IssueDetailModel {
     /// Mögliche Workflow-Übergänge — fürs Status-Dropdown im Header.
     private(set) var availableTransitions: [TransitionDTO] = []
 
+    /// Team des Issues (Atlassian-Team-Custom-Field, Name via Raw-Fetch).
+    private(set) var teamName: String?
+
     /// Thumbnail-Cache: Attachment-ID → Bild. Einträge entstehen lazy über
     /// `thumbnail(for:)`.
     private(set) var thumbnails: [String: NSImage] = [:]
@@ -75,8 +78,10 @@ final class IssueDetailModel {
             // Harvest-Summe parallel nachziehen (non-blocking, Nice-to-have).
             Task { await self.refreshLoggedTime() }
             // Projekt/Typ/Team/Komponenten als „zuletzt angesehen"-Vorbelegung
-            // für den Neues-Issue-Dialog übernehmen.
-            Task { await CreateIssueService.shared.captureViewedIssue(key: self.issueKey) }
+            // übernehmen; liefert nebenbei den Team-Namen für die Details.
+            Task {
+                self.teamName = await CreateIssueService.shared.captureViewedIssue(key: self.issueKey)
+            }
             // Zuweisbare Personen im Hintergrund vorladen (fürs Dropdown).
             if assignableUsers.isEmpty {
                 assignableUsers = (try? await client.assignableUsers(issueKey: issueKey)) ?? []

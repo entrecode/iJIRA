@@ -7,6 +7,7 @@ struct RootView: View {
     @Bindable var appState: AppState
     let store: NotificationStore
     let syncEngine: SyncEngine
+    @Bindable var navigation: PopoverNavigation
 
     @State private var selectedIssue: String?
 
@@ -25,6 +26,18 @@ struct RootView: View {
         .onExitCommand {
             MenuBarController.shared?.closePopover()
         }
+        // Navigations-Wunsch (Notification-Tap): Konversation direkt öffnen —
+        // beim Aufbau UND wenn das Popover schon offen ist.
+        .onAppear { consumePendingNavigation() }
+        .onChange(of: navigation.pendingIssueKey) { _, _ in
+            consumePendingNavigation()
+        }
+    }
+
+    private func consumePendingNavigation() {
+        guard let key = navigation.pendingIssueKey else { return }
+        selectedIssue = key
+        navigation.pendingIssueKey = nil
     }
 
     @ViewBuilder

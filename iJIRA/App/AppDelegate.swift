@@ -62,9 +62,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: keys)
         }
 
-        // Tap auf die Sammel-Notification öffnet das Popover.
+        // Tap auf die Sammel-Notification öffnet das Popover; Tap auf eine
+        // einzelne Notification direkt die zugehörige Konversation.
         pushPresenter.openPopover = { [weak controller] in
             controller?.showPopover()
+        }
+        pushPresenter.openConversation = { [weak controller] issueKey in
+            controller?.showConversation(issueKey: issueKey)
         }
 
         // Hauptfenster öffnet → Popover schließen (kein Kampf um Key-Status).
@@ -105,9 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// App „erneut geöffnet" (Dock-Klick, Doppelklick im Finder, Spotlight):
-    /// das ist der Moment für das Hauptfenster.
+    /// das ist der Moment für das Hauptfenster. Nicht aber direkt nach einem
+    /// Notification-Tap — der öffnet gezielt das Popover.
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows flag: Bool) -> Bool {
+        guard !ReopenSuppressor.isSuppressed else { return false }
         MainWindowController.shared.show()
         return false
     }

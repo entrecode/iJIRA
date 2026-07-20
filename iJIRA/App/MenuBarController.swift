@@ -5,11 +5,14 @@ import SwiftUI
 /// der die SwiftUI-Oberfläche via `NSHostingController` hostet.
 @MainActor
 final class MenuBarController: NSObject {
+    private(set) static weak var shared: MenuBarController?
+
     private let appState: AppState
     private let store: NotificationStore
     private let syncEngine: SyncEngine
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
+    private var resignActiveObserver: NSObjectProtocol?
 
     init(appState: AppState, store: NotificationStore, syncEngine: SyncEngine) {
         self.appState = appState
@@ -20,6 +23,7 @@ final class MenuBarController: NSObject {
         configureStatusItem()
         configurePopover()
         updateBadge(unread: store.unreadCount)
+        MenuBarController.shared = self
     }
 
     /// Aktualisiert Icon + Zahl anhand der ungelesen-Anzahl.
@@ -42,12 +46,28 @@ final class MenuBarController: NSObject {
         button.image?.isTemplate = true
         button.target = self
         button.action = #selector(togglePopover(_:))
+        // Nie Tastaturfokus auf den Status-Button: sonst kann die Leertaste
+        // beim Tippen im Popover den Button „drücken" und es damit schließen.
+        button.refusesFirstResponder = true
     }
 
     private func configurePopover() {
-        popover.behavior = .transient
+        // Bewusst NICHT .transient: das transiente Verhalten schließt das
+        // Popover bei jeder „Interaktion außerhalb" — darunter fiel auch die
+        // Leertaste beim Kommentar-Tippen (verlorene Entwürfe). Stattdessen
+        // schließen wir selbst: bei App-Deaktivierung (Klick woanders hin),
+        // Esc (RootView.onExitCommand) und erneutem Klick aufs Statusicon.
+        popover.behavior = .applicationDefined
         popover.contentSize = NSSize(width: 380, height: 520)
         popover.contentViewController = makeContentViewController()
+
+        resignActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor [weak self] in
+                self?.closePopover()
+            }
+        }
     }
 
     /// Baut den Popover-Inhalt frisch auf. Wird bei jedem Öffnen neu erzeugt:

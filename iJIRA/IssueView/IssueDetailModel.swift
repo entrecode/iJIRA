@@ -23,6 +23,9 @@ final class IssueDetailModel {
     /// Verfügbare Link-Typen (lazy beim ersten „Verknüpfung hinzufügen").
     private(set) var linkTypes: [IssueLinkTypeDTO] = []
 
+    /// Mögliche Workflow-Übergänge — fürs Status-Dropdown im Header.
+    private(set) var availableTransitions: [TransitionDTO] = []
+
     /// Thumbnail-Cache: Attachment-ID → Bild. Einträge entstehen lazy über
     /// `thumbnail(for:)`.
     private(set) var thumbnails: [String: NSImage] = [:]
@@ -78,6 +81,7 @@ final class IssueDetailModel {
             if assignableUsers.isEmpty {
                 assignableUsers = (try? await client.assignableUsers(issueKey: issueKey)) ?? []
             }
+            availableTransitions = (try? await client.transitions(issueKey: issueKey)) ?? []
         } catch {
             loadError = (error as? JiraError)?.userMessage ?? error.localizedDescription
         }
@@ -89,9 +93,25 @@ final class IssueDetailModel {
         do {
             detail = try await client.issueDetail(key: issueKey)
             comments = (try? await client.allComments(issueKey: issueKey)) ?? comments
+            availableTransitions = (try? await client.transitions(issueKey: issueKey))
+                ?? availableTransitions
         } catch {
             actionError = (error as? JiraError)?.userMessage ?? error.localizedDescription
         }
+    }
+
+    /// Statuswechsel direkt aus der Detailview (Dropdown am Status-Badge).
+    func applyTransition(_ transition: TransitionDTO) async -> Bool {
+        let success = await performEdit { client in
+            try await client.applyTransition(issueKey: self.issueKey,
+                                             transitionId: transition.id)
+        }
+        if success {
+            Log.app.info("Transition \(self.issueKey, privacy: .public) → \(transition.to?.name ?? transition.name ?? "?", privacy: .public)")
+            // Board-Snapshot zieht nach, damit die Karte gleich umzieht.
+            MainWindowController.shared?.boardStore.kickRefresh()
+        }
+        return success
     }
 
     // MARK: - Feld-Edits

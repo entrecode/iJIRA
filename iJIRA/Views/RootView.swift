@@ -21,6 +21,10 @@ struct RootView: View {
             footer
         }
         .frame(width: 380, height: 520)
+        // Popover ist .applicationDefined — Esc schließt es hier explizit.
+        .onExitCommand {
+            MenuBarController.shared?.closePopover()
+        }
     }
 
     @ViewBuilder

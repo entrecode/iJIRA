@@ -103,7 +103,7 @@ struct IssueDetailContent: View {
         HStack(spacing: 10) {
             IssueKeyChip(key: model.issueKey)
             if let status = detail.fields.status {
-                StatusBadge(status: status)
+                StatusTransitionMenu(model: model, status: status)
             }
             Spacer()
             TimeLogButton(model: model)
@@ -169,7 +169,7 @@ private struct IssueWindowHeader: View {
             IssueKeyChip(key: model.issueKey)
 
             if let status = model.detail?.fields.status {
-                StatusBadge(status: status)
+                StatusTransitionMenu(model: model, status: status)
             }
 
             Spacer()
@@ -229,6 +229,55 @@ struct IssueKeyChip: View {
         .buttonStyle(.plain)
         .glassChip()
         .help("Key kopieren")
+    }
+}
+
+/// Status-Badge mit Dropdown der möglichen Workflow-Übergänge — Statuswechsel
+/// direkt aus der Detailview („In Arbeit" → „Fertig"), ohne Umweg übers Board.
+struct StatusTransitionMenu: View {
+    @Bindable var model: IssueDetailModel
+    let status: StatusDTO
+
+    @State private var isApplying = false
+
+    var body: some View {
+        Menu {
+            ForEach(model.availableTransitions) { transition in
+                Button {
+                    Task {
+                        isApplying = true
+                        defer { isApplying = false }
+                        _ = await model.applyTransition(transition)
+                    }
+                } label: {
+                    if transition.to?.name == status.name {
+                        Label(targetName(transition), systemImage: "checkmark")
+                    } else {
+                        Text(targetName(transition))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                StatusBadge(status: status)
+                if isApplying {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(model.availableTransitions.isEmpty)
+        .help("Status ändern")
+    }
+
+    private func targetName(_ transition: TransitionDTO) -> String {
+        transition.to?.name ?? transition.name ?? "?"
     }
 }
 

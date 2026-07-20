@@ -29,6 +29,11 @@ final class IssueDetailModel {
     /// Team des Issues (Atlassian-Team-Custom-Field, Name via Raw-Fetch).
     private(set) var teamName: String?
 
+    /// Projekt-Versionen (Fix-Version-Dropdown) — lazy, gecacht.
+    private(set) var projectVersions: [VersionDTO] = []
+    /// Alle Labels der Site (Vorschläge im Labels-Editor) — lazy, gecacht.
+    private(set) var allLabels: [String] = []
+
     /// Thumbnail-Cache: Attachment-ID → Bild. Einträge entstehen lazy über
     /// `thumbnail(for:)`.
     private(set) var thumbnails: [String: NSImage] = [:]
@@ -153,6 +158,32 @@ final class IssueDetailModel {
     func loadLinkTypes() async {
         guard linkTypes.isEmpty, let client else { return }
         linkTypes = (try? await client.issueLinkTypes()) ?? []
+    }
+
+    func loadProjectVersions() async {
+        guard projectVersions.isEmpty, let client,
+              let projectKey = detail?.fields.project?.key else { return }
+        projectVersions = ((try? await client.projectVersions(projectKey: projectKey)) ?? [])
+            .filter { $0.archived != true }
+    }
+
+    func loadAllLabels() async {
+        guard allLabels.isEmpty, let client else { return }
+        allLabels = ((try? await client.allLabels()) ?? []).sorted()
+    }
+
+    /// Labels komplett ersetzen (Add/Remove läuft über die volle Liste).
+    func setLabels(_ labels: [String]) async -> Bool {
+        await performEdit { client in
+            try await client.editIssue(key: self.issueKey, fields: ["labels": labels])
+        }
+    }
+
+    func setFixVersions(ids: [String]) async -> Bool {
+        await performEdit { client in
+            try await client.editIssue(key: self.issueKey,
+                                       fields: ["fixVersions": ids.map { ["id": $0] }])
+        }
     }
 
     func setAssignee(_ user: UserDTO?) async -> Bool {

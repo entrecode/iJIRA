@@ -67,6 +67,7 @@ struct IssueMetaSection: View {
 
     @State private var showAssigneePicker = false
     @State private var showParentPicker = false
+    @State private var showLabelsEditor = false
 
     var body: some View {
         SectionCard(title: "Details", systemImage: "list.bullet.rectangle") {
@@ -88,16 +89,84 @@ struct IssueMetaSection: View {
                     metaLabel("Parent")
                     parentChip
                     metaLabel("Labels")
-                    textValue(detail.fields.labels?.joined(separator: ", "))
+                    labelsChip
                 }
                 GridRow {
                     metaLabel("Team")
                     textValue(model.teamName)
                     metaLabel("Fix Version")
-                    textValue(detail.fields.fixVersions?.compactMap(\.name).joined(separator: ", "))
+                    fixVersionsChip
                 }
             }
         }
+        .task(id: detail.key) { await model.loadProjectVersions() }
+    }
+
+    // MARK: Labels (editierbar)
+
+    private var labelsChip: some View {
+        Button {
+            showLabelsEditor = true
+        } label: {
+            HStack(spacing: 6) {
+                textValue(detail.fields.labels?.joined(separator: ", "))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Labels bearbeiten")
+        .popover(isPresented: $showLabelsEditor, arrowEdge: .bottom) {
+            LabelsEditorView(model: model)
+        }
+    }
+
+    // MARK: Fix Version (editierbar, Mehrfachauswahl)
+
+    private var fixVersionsChip: some View {
+        Menu {
+            if model.projectVersions.isEmpty {
+                Button("Keine Versionen im Projekt") {}.disabled(true)
+            }
+            ForEach(model.projectVersions) { version in
+                Button {
+                    Task { await toggleFixVersion(version) }
+                } label: {
+                    if selectedFixVersionIds.contains(version.id) {
+                        Label(version.name, systemImage: "checkmark")
+                    } else {
+                        Text(version.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                textValue(detail.fields.fixVersions?.compactMap(\.name).joined(separator: ", "))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("Fix Version ändern")
+    }
+
+    private var selectedFixVersionIds: Set<String> {
+        Set((detail.fields.fixVersions ?? []).compactMap(\.id))
+    }
+
+    private func toggleFixVersion(_ version: VersionDTO) async {
+        var ids = selectedFixVersionIds
+        if ids.contains(version.id) {
+            ids.remove(version.id)
+        } else {
+            ids.insert(version.id)
+        }
+        _ = await model.setFixVersions(ids: Array(ids))
     }
 
     private func metaLabel(_ text: String) -> some View {
@@ -224,6 +293,96 @@ struct UserLabel: View {
             AvatarView(url: user.avatar48.flatMap { URL(string: $0) }, kind: .comment, size: 20)
             Text(user.displayName ?? "?").font(.callout)
         }
+    }
+}
+
+// MARK: - Labels-Editor (Popover)
+
+/// Labels bearbeiten: aktuelle als entfernbare Chips, neue per Textfeld
+/// (mit Vorschlägen aus allen Site-Labels). Änderungen werden sofort gespeichert.
+struct LabelsEditorView: View {
+    @Bindable var model: IssueDetailModel
+
+    @State private var input = ""
+    @FocusState private var focused: Bool
+
+    private var current: [String] { model.detail?.fields.labels ?? [] }
+
+    private var suggestions: [String] {
+        let query = input.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return [] }
+        return model.allLabels
+            .filter { $0.lowercased().contains(query) && !current.contains($0) }
+            .prefix(6)
+            .map { $0 }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if current.isEmpty {
+                Text("Keine Labels")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+            } else {
+                FlowLayoutLite(spacing: 6) {
+                    ForEach(current, id: \.self) { label in
+                        HStack(spacing: 4) {
+                            Text(label).font(.callout)
+                            Button {
+                                Task { _ = await model.setLabels(current.filter { $0 != label }) }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary.opacity(0.4), in: Capsule())
+                    }
+                }
+            }
+
+            TextField("Label hinzufügen … (⏎)", text: $input)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit { add(input) }
+
+            if !suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        Button {
+                            add(suggestion)
+                        } label: {
+                            Text(suggestion)
+                                .font(.callout)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(12)
+        .frame(width: 300)
+        .task {
+            focused = true
+            await model.loadAllLabels()
+        }
+    }
+
+    private func add(_ raw: String) {
+        // Jira-Labels dürfen keine Leerzeichen enthalten.
+        let label = raw.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: " ", with: "-")
+        guard !label.isEmpty, !current.contains(label) else { return }
+        input = ""
+        Task { _ = await model.setLabels(current + [label]) }
     }
 }
 

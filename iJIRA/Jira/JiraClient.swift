@@ -248,6 +248,14 @@ struct JiraClient: Sendable {
                                 json: ["accountId": accountId ?? NSNull()])
     }
 
+    func projectVersions(projectKey: String) async throws -> [VersionDTO] {
+        try await get("rest/api/3/project/\(projectKey)/versions", as: [VersionDTO].self)
+    }
+
+    func allLabels(maxResults: Int = 1000) async throws -> [String] {
+        try await get("rest/api/3/label?maxResults=\(maxResults)", as: LabelsResponse.self).values
+    }
+
     // MARK: - Personen
 
     /// Alle für ein Issue zuweisbaren Personen (fürs Assignee-Dropdown).

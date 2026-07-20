@@ -28,7 +28,23 @@ struct IssueDetailFields: Decodable, Sendable {
 }
 
 struct FixVersionDTO: Codable, Sendable {
+    let id: String?
     let name: String?
+}
+
+/// Projekt-Version (GET /rest/api/3/project/{key}/versions) — fürs
+/// Fix-Version-Dropdown.
+struct VersionDTO: Codable, Sendable, Identifiable {
+    let id: String
+    let name: String
+    let released: Bool?
+    let archived: Bool?
+}
+
+/// GET /rest/api/3/label — alle Labels der Site (fürs Vorschlagen).
+struct LabelsResponse: Decodable, Sendable {
+    let values: [String]
+    let isLast: Bool?
 }
 
 struct StatusDTO: Decodable, Sendable {

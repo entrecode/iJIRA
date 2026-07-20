@@ -13,6 +13,7 @@ final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private var resignActiveObserver: NSObjectProtocol?
+    private var spaceKeyMonitor: Any?
 
     init(appState: AppState, store: NotificationStore, syncEngine: SyncEngine) {
         self.appState = appState
@@ -68,6 +69,36 @@ final class MenuBarController: NSObject {
                 self?.closePopover()
             }
         }
+
+        // Die Leertaste erreicht das Popover-Textfeld nicht zuverlässig: das
+        // System (Tastatursteuerung/Menüleisten-Tracking) „drückt" damit den
+        // noch fokussierten Status-Button — Space kam nie im Editor an.
+        // Der lokale Monitor sieht jedes Key-Event dieses Prozesses zuerst und
+        // steckt Space bei offenem Popover direkt in dessen First Responder.
+        spaceKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.interceptSpaceIfNeeded(event)
+        }
+    }
+
+    /// Leertaste bei offenem Popover selbst zustellen (siehe configurePopover).
+    private func interceptSpaceIfNeeded(_ event: NSEvent) -> NSEvent? {
+        guard popover.isShown,
+              event.keyCode == 49, // Space
+              event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+              let popoverWindow = popover.contentViewController?.view.window
+        else { return event }
+
+        // Nur Events abfangen, die fürs Popover bzw. den Status-Button gedacht
+        // sind — Tippen in anderen Fenstern bleibt unberührt.
+        let statusWindow = statusItem.button?.window
+        guard event.window == nil || event.window == popoverWindow || event.window == statusWindow
+        else { return event }
+
+        guard let textView = popoverWindow.firstResponder as? NSTextView,
+              textView.isEditable else { return event }
+        textView.insertText(" ", replacementRange: textView.selectedRange())
+        return nil // verschluckt — erreicht weder Button noch Menü-Tracking
     }
 
     /// Baut den Popover-Inhalt frisch auf. Wird bei jedem Öffnen neu erzeugt:
@@ -90,6 +121,14 @@ final class MenuBarController: NSObject {
 
     @objc private func togglePopover(_ sender: Any?) {
         if popover.isShown {
+            // Nur echte Mausklicks schließen — ein per Tastatur „gedrückter"
+            // Status-Button (Space bei Tastatursteuerung) darf das Popover
+            // nicht zuklappen.
+            let mouseTypes: Set<NSEvent.EventType> = [
+                .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+                .otherMouseDown, .otherMouseUp,
+            ]
+            guard let event = NSApp.currentEvent, mouseTypes.contains(event.type) else { return }
             popover.performClose(sender)
         } else {
             openPopover()

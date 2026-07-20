@@ -12,11 +12,12 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     PRODUCT_BUNDLE_IDENTIFIER: de.entrecode.iJIRA
-    # Echtes Team-Signing → stabile Identität (Erlaubnis & Keychain überleben
-    # Rebuilds). Build mit `-allowProvisioningUpdates`, Apple-ID des Teams muss
-    # in Xcode eingeloggt sein.
-    DEVELOPMENT_TEAM: 4W7DMXPNC2
-    CODE_SIGN_STYLE: Automatic
+    # Manuelles Developer-ID-Signing für ALLE Builds → stabile Identität
+    # (Keychain-Erlaubnis überlebt Rebuilds), kein Xcode-Login nötig und
+    # identisch mit der notarisierten Release-Signatur.
+    DEVELOPMENT_TEAM: MAMAYY5H8H
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: Developer ID Application
     ENABLE_HARDENED_RUNTIME: YES
 
 targets:

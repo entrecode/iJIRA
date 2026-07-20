@@ -6,18 +6,19 @@
 #
 # Voraussetzungen für Notarisierung (einmalig):
 #   1. "Developer ID Application"-Zertifikat in der Keychain
-#      (Xcode → Settings → Accounts → Manage Certificates → + → Developer ID Application)
-#   2. Notar-Zugangsdaten als Keychain-Profil "iJIRA-notary":
-#        xcrun notarytool store-credentials iJIRA-notary \
-#          --apple-id "<deine-apple-id>" --team-id 4W7DMXPNC2 \
+#      (CSR via Schlüsselbundverwaltung → Zertifikatsassistent, dann
+#      developer.apple.com → Certificates → Developer ID Application)
+#   2. Notar-Zugangsdaten als Keychain-Profil "ijira-notary":
+#        xcrun notarytool store-credentials ijira-notary \
+#          --apple-id "<deine-apple-id>" --team-id MAMAYY5H8H \
 #          --password "<app-spezifisches-passwort>"
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP_NAME="iJIRA"
-TEAM="4W7DMXPNC2"
-PROFILE="iJIRA-notary"
+TEAM="MAMAYY5H8H"
+PROFILE="ijira-notary"
 BUILD_DIR=".build-release"
 APP="$BUILD_DIR/Build/Products/Release/$APP_NAME.app"
 ZIP="$BUILD_DIR/$APP_NAME.zip"
@@ -44,6 +45,7 @@ if [ "$HAS_CERT" = true ]; then
       DEVELOPMENT_TEAM="$TEAM" \
       ENABLE_HARDENED_RUNTIME=YES \
       OTHER_CODE_SIGN_FLAGS="--timestamp" \
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
       -allowProvisioningUpdates clean build
 else
     xcodebuild -project "$APP_NAME.xcodeproj" -scheme "$APP_NAME" -configuration Release \
@@ -62,7 +64,13 @@ if [ "$HAS_CERT" = true ]; then
     ditto -c -k --keepParent "$APP" "$ZIP"
 
     echo "==> An Apple-Notardienst senden (wartet auf Ergebnis)"
-    xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait
+    RESULT=$(xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait | tee /dev/stderr)
+    if ! echo "$RESULT" | grep -q "status: Accepted"; then
+        SUBMISSION_ID=$(echo "$RESULT" | awk '/id:/ {print $2; exit}')
+        echo "❌ Notarisierung fehlgeschlagen. Protokoll:"
+        xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$PROFILE" || true
+        exit 1
+    fi
 
     echo "==> Ticket anheften"
     xcrun stapler staple "$APP"
@@ -70,8 +78,15 @@ if [ "$HAS_CERT" = true ]; then
     echo "==> Gatekeeper-Bewertung"
     spctl -a -vvv --type execute "$APP" || true
 
+    # Zip mit gestapelter App erneuern — das ist die Datei zum Weitergeben
+    # (Ticket inklusive, funktioniert damit auch offline).
+    echo "==> Distributions-Zip erneuern"
+    rm -f "$ZIP"
+    ditto -c -k --keepParent "$APP" "$ZIP"
+
     echo
     echo "✅ Fertig: $APP (signiert + notarisiert)"
+    echo "   Weitergeben: $ZIP"
 else
     echo "==> Zippen"
     rm -f "$ZIP"

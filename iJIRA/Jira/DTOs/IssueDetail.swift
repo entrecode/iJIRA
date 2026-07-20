@@ -39,6 +39,28 @@ struct VersionDTO: Codable, Sendable, Identifiable {
     let name: String
     let released: Bool?
     let archived: Bool?
+
+    /// Numerische Komponenten des Namens ("6.42.3" → [6, 42, 3]) — für
+    /// echte Versions-Sortierung statt alphabetischer ("6.9" > "6.41" wäre
+    /// sonst falsch herum).
+    var numericComponents: [Int] {
+        name.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+    }
+
+    /// Absteigend: höchste Version zuerst; Namen ohne Zahlen ans Ende
+    /// (alphabetisch).
+    static func sortedDescending(_ versions: [VersionDTO]) -> [VersionDTO] {
+        versions.sorted { a, b in
+            let ka = a.numericComponents
+            let kb = b.numericComponents
+            if ka.isEmpty != kb.isEmpty { return kb.isEmpty }
+            if ka == kb { return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending }
+            for (x, y) in zip(ka, kb) where x != y {
+                return x > y
+            }
+            return ka.count > kb.count
+        }
+    }
 }
 
 /// GET /rest/api/3/label — alle Labels der Site (fürs Vorschlagen).

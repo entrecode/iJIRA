@@ -163,8 +163,9 @@ final class IssueDetailModel {
     func loadProjectVersions() async {
         guard projectVersions.isEmpty, let client,
               let projectKey = detail?.fields.project?.key else { return }
-        projectVersions = ((try? await client.projectVersions(projectKey: projectKey)) ?? [])
+        let loaded = ((try? await client.projectVersions(projectKey: projectKey)) ?? [])
             .filter { $0.archived != true }
+        projectVersions = VersionDTO.sortedDescending(loaded)
     }
 
     func loadAllLabels() async {

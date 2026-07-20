@@ -68,6 +68,7 @@ struct IssueMetaSection: View {
     @State private var showAssigneePicker = false
     @State private var showParentPicker = false
     @State private var showLabelsEditor = false
+    @State private var showFixVersionsEditor = false
 
     var body: some View {
         SectionCard(title: "Details", systemImage: "list.bullet.rectangle") {
@@ -123,24 +124,11 @@ struct IssueMetaSection: View {
         }
     }
 
-    // MARK: Fix Version (editierbar, Mehrfachauswahl)
+    // MARK: Fix Version (editierbar, Tippsuche wie Labels)
 
     private var fixVersionsChip: some View {
-        Menu {
-            if model.projectVersions.isEmpty {
-                Button("Keine Versionen im Projekt") {}.disabled(true)
-            }
-            ForEach(model.projectVersions) { version in
-                Button {
-                    Task { await toggleFixVersion(version) }
-                } label: {
-                    if selectedFixVersionIds.contains(version.id) {
-                        Label(version.name, systemImage: "checkmark")
-                    } else {
-                        Text(version.name)
-                    }
-                }
-            }
+        Button {
+            showFixVersionsEditor = true
         } label: {
             HStack(spacing: 6) {
                 textValue(detail.fields.fixVersions?.compactMap(\.name).joined(separator: ", "))
@@ -150,23 +138,11 @@ struct IssueMetaSection: View {
             }
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .help("Fix Version ändern")
-    }
-
-    private var selectedFixVersionIds: Set<String> {
-        Set((detail.fields.fixVersions ?? []).compactMap(\.id))
-    }
-
-    private func toggleFixVersion(_ version: VersionDTO) async {
-        var ids = selectedFixVersionIds
-        if ids.contains(version.id) {
-            ids.remove(version.id)
-        } else {
-            ids.insert(version.id)
+        .buttonStyle(.plain)
+        .help("Fix Version bearbeiten")
+        .popover(isPresented: $showFixVersionsEditor, arrowEdge: .bottom) {
+            FixVersionsEditorView(model: model)
         }
-        _ = await model.setFixVersions(ids: Array(ids))
     }
 
     private func metaLabel(_ text: String) -> some View {
@@ -383,6 +359,116 @@ struct LabelsEditorView: View {
         guard !label.isEmpty, !current.contains(label) else { return }
         input = ""
         Task { _ = await model.setLabels(current + [label]) }
+    }
+}
+
+// MARK: - Fix-Version-Editor (Popover)
+
+/// Fix Versions bearbeiten: gesetzte als entfernbare Chips, Hinzufügen per
+/// Tippsuche über die Projekt-Versionen — Vorschläge absteigend sortiert
+/// (höchste Version zuerst). Änderungen speichern sofort.
+struct FixVersionsEditorView: View {
+    @Bindable var model: IssueDetailModel
+
+    @State private var input = ""
+    @FocusState private var focused: Bool
+
+    private var current: [FixVersionDTO] { model.detail?.fields.fixVersions ?? [] }
+    private var currentIds: Set<String> { Set(current.compactMap(\.id)) }
+
+    /// Projekt-Versionen sind im Model bereits absteigend sortiert.
+    private var suggestions: [VersionDTO] {
+        let query = input.trimmingCharacters(in: .whitespaces).lowercased()
+        return model.projectVersions
+            .filter { !currentIds.contains($0.id) }
+            .filter { query.isEmpty || $0.name.lowercased().contains(query) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if current.isEmpty {
+                Text("Keine Fix Version")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+            } else {
+                FlowLayoutLite(spacing: 6) {
+                    ForEach(current.compactMap(\.id), id: \.self) { id in
+                        HStack(spacing: 4) {
+                            Text(current.first { $0.id == id }?.name ?? id)
+                                .font(.callout)
+                            Button {
+                                Task {
+                                    _ = await model.setFixVersions(
+                                        ids: Array(currentIds.subtracting([id])))
+                                }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary.opacity(0.4), in: Capsule())
+                    }
+                }
+            }
+
+            TextField("Version suchen … (⏎ = erste)", text: $input)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit {
+                    if let first = suggestions.first { add(first) }
+                }
+
+            if suggestions.isEmpty {
+                Text(model.projectVersions.isEmpty
+                     ? "Keine Versionen im Projekt"
+                     : "Keine Treffer")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(suggestions.prefix(30)) { version in
+                            Button {
+                                add(version)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(version.name).font(.callout)
+                                    if version.released == true {
+                                        Text("released")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(12)
+        .frame(width: 300)
+        .task {
+            focused = true
+            await model.loadProjectVersions()
+        }
+    }
+
+    private func add(_ version: VersionDTO) {
+        input = ""
+        Task {
+            _ = await model.setFixVersions(ids: Array(currentIds.union([version.id])))
+        }
     }
 }
 

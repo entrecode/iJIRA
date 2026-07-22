@@ -136,8 +136,10 @@ struct IssueMetaSection: View {
             HStack(spacing: 5) {
                 IssueTypeIcon(typeName: detail.fields.issuetype?.name)
                 Text(detail.fields.issuetype?.name ?? "—").font(.callout)
+                Spacer(minLength: 4)
                 editChevron
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
@@ -341,10 +343,10 @@ struct IssueMetaSection: View {
                 } else {
                     Text("Nicht zugewiesen").font(.callout).foregroundStyle(.tertiary)
                 }
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                editChevron
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -383,12 +385,11 @@ struct IssueMetaSection: View {
             } else {
                 Text("Kein Parent").font(.callout).foregroundStyle(.tertiary)
             }
+            Spacer(minLength: 4)
             Button {
                 showParentPicker = true
             } label: {
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                editChevron
             }
             .buttonStyle(.plain)
             .help("Parent ändern")
@@ -402,6 +403,7 @@ struct IssueMetaSection: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

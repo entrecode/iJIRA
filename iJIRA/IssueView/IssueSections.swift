@@ -167,9 +167,11 @@ struct IssueMetaSection: View {
             }
         } label: {
             HStack(spacing: 6) {
-                textValue(detail.fields.components?.map(\.name).joined(separator: ", "))
+                valueLabel(detail.fields.components?.map(\.name).joined(separator: ", "))
+                Spacer(minLength: 4)
                 editChevron
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
@@ -211,9 +213,11 @@ struct IssueMetaSection: View {
             }
         } label: {
             HStack(spacing: 6) {
-                textValue(model.teamName)
+                valueLabel(model.teamName)
+                Spacer(minLength: 4)
                 editChevron
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
@@ -244,9 +248,11 @@ struct IssueMetaSection: View {
             }
         } label: {
             HStack(spacing: 6) {
-                textValue(model.sprintName)
+                valueLabel(model.sprintName)
+                Spacer(minLength: 4)
                 editChevron
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
@@ -265,11 +271,11 @@ struct IssueMetaSection: View {
             showLabelsEditor = true
         } label: {
             HStack(spacing: 6) {
-                textValue(detail.fields.labels?.joined(separator: ", "))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                valueLabel(detail.fields.labels?.joined(separator: ", "))
+                Spacer(minLength: 4)
+                editChevron
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -286,11 +292,11 @@ struct IssueMetaSection: View {
             showFixVersionsEditor = true
         } label: {
             HStack(spacing: 6) {
-                textValue(detail.fields.fixVersions?.compactMap(\.name).joined(separator: ", "))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                valueLabel(detail.fields.fixVersions?.compactMap(\.name).joined(separator: ", "))
+                Spacer(minLength: 4)
+                editChevron
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -308,19 +314,18 @@ struct IssueMetaSection: View {
             .frame(minWidth: 70, alignment: .leading)
     }
 
-    /// Textwert mit „—"-Platzhalter für leere Felder.
+    /// Reiner Wert-Text mit „—"-Platzhalter (ohne Breiten-Frame — der Chip
+    /// setzt Layout/Spacer selbst, damit der Pfeil einheitlich rechts sitzt).
     @ViewBuilder
-    private func textValue(_ text: String?) -> some View {
+    private func valueLabel(_ text: String?) -> some View {
         if let text, !text.isEmpty {
             Text(text)
                 .font(.callout)
                 .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text("—")
                 .font(.callout)
                 .foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

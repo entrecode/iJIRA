@@ -69,6 +69,10 @@ struct IssueMetaSection: View {
     @State private var showParentPicker = false
     @State private var showLabelsEditor = false
     @State private var showFixVersionsEditor = false
+    @State private var showIssueTypePicker = false
+    @State private var showComponentsPicker = false
+    @State private var showTeamPicker = false
+    @State private var showSprintPicker = false
 
     var body: some View {
         SectionCard(title: "Details", systemImage: "list.bullet.rectangle") {
@@ -117,21 +121,8 @@ struct IssueMetaSection: View {
     // MARK: Issue-Type (editierbar)
 
     private var issueTypeChip: some View {
-        Menu {
-            if model.issueTypeOptions.isEmpty {
-                Button("Lädt …") {}.disabled(true)
-            }
-            ForEach(model.issueTypeOptions) { type in
-                Button {
-                    Task { _ = await model.setIssueType(id: type.id) }
-                } label: {
-                    if type.id == detail.fields.issuetype?.id {
-                        Label(type.name, systemImage: "checkmark")
-                    } else {
-                        Text(type.name)
-                    }
-                }
-            }
+        Button {
+            showIssueTypePicker = true
         } label: {
             HStack(spacing: 5) {
                 IssueTypeIcon(typeName: detail.fields.issuetype?.name)
@@ -142,29 +133,24 @@ struct IssueMetaSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .help("Issue-Type ändern")
+        .popover(isPresented: $showIssueTypePicker, arrowEdge: .bottom) {
+            OptionsPopover(
+                items: model.issueTypeOptions.map { .init(id: $0.id, label: $0.name) },
+                selectedIds: detail.fields.issuetype?.id.map { [$0] } ?? [],
+                emptyLabel: "Lädt …"
+            ) { id in
+                if let id { Task { _ = await model.setIssueType(id: id) } }
+            }
+        }
     }
 
     // MARK: Components (editierbar, Mehrfachauswahl)
 
     private var componentsChip: some View {
-        Menu {
-            if model.componentOptions.isEmpty {
-                Button("Keine Komponenten im Projekt") {}.disabled(true)
-            }
-            ForEach(model.componentOptions) { component in
-                Button {
-                    Task { await toggleComponent(component) }
-                } label: {
-                    if currentComponentIds.contains(component.id) {
-                        Label(component.name, systemImage: "checkmark")
-                    } else {
-                        Text(component.name)
-                    }
-                }
-            }
+        Button {
+            showComponentsPicker = true
         } label: {
             HStack(spacing: 6) {
                 valueLabel(detail.fields.components?.map(\.name).joined(separator: ", "))
@@ -174,9 +160,21 @@ struct IssueMetaSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .help("Components ändern")
+        .popover(isPresented: $showComponentsPicker, arrowEdge: .bottom) {
+            OptionsPopover(
+                items: model.componentOptions.map { .init(id: $0.id, label: $0.name) },
+                selectedIds: currentComponentIds,
+                multiSelect: true,
+                emptyLabel: "Keine Komponenten im Projekt"
+            ) { id in
+                guard let id,
+                      let component = model.componentOptions.first(where: { $0.id == id })
+                else { return }
+                Task { await toggleComponent(component) }
+            }
+        }
     }
 
     private var currentComponentIds: Set<String> {
@@ -196,21 +194,8 @@ struct IssueMetaSection: View {
     // MARK: Team (editierbar)
 
     private var teamChip: some View {
-        Menu {
-            Button("Kein Team") {
-                Task { _ = await model.setTeam(nil) }
-            }
-            ForEach(model.teamOptions) { team in
-                Button {
-                    Task { _ = await model.setTeam(team) }
-                } label: {
-                    if team.id == model.teamId {
-                        Label(team.name, systemImage: "checkmark")
-                    } else {
-                        Text(team.name)
-                    }
-                }
-            }
+        Button {
+            showTeamPicker = true
         } label: {
             HStack(spacing: 6) {
                 valueLabel(model.teamName)
@@ -220,32 +205,26 @@ struct IssueMetaSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .help("Team ändern")
+        .popover(isPresented: $showTeamPicker, arrowEdge: .bottom) {
+            OptionsPopover(
+                items: model.teamOptions.map { .init(id: $0.id, label: $0.name) },
+                selectedIds: model.teamId.map { [$0] } ?? [],
+                clearLabel: "Kein Team",
+                emptyLabel: "Keine Teams verfügbar"
+            ) { id in
+                let team = model.teamOptions.first { $0.id == id }
+                Task { _ = await model.setTeam(team) }
+            }
+        }
     }
 
     // MARK: Sprint (editierbar)
 
     private var sprintChip: some View {
-        Menu {
-            Button("Kein Sprint (Backlog)") {
-                Task { _ = await model.setSprint(nil) }
-            }
-            if model.availableSprints.isEmpty {
-                Button("Keine Sprints verfügbar") {}.disabled(true)
-            }
-            ForEach(model.availableSprints) { sprint in
-                Button {
-                    Task { _ = await model.setSprint(sprint) }
-                } label: {
-                    if sprint.id == model.sprintId {
-                        Label(sprintLabel(sprint), systemImage: "checkmark")
-                    } else {
-                        Text(sprintLabel(sprint))
-                    }
-                }
-            }
+        Button {
+            showSprintPicker = true
         } label: {
             HStack(spacing: 6) {
                 valueLabel(model.sprintName)
@@ -255,9 +234,21 @@ struct IssueMetaSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .help("Sprint ändern")
+        .popover(isPresented: $showSprintPicker, arrowEdge: .bottom) {
+            OptionsPopover(
+                items: model.availableSprints.map { .init(id: String($0.id), label: sprintLabel($0)) },
+                selectedIds: model.sprintId.map { [String($0)] } ?? [],
+                clearLabel: "Kein Sprint (Backlog)",
+                emptyLabel: "Keine Sprints verfügbar"
+            ) { idString in
+                let sprint = idString.flatMap { id in
+                    model.availableSprints.first { String($0.id) == id }
+                }
+                Task { _ = await model.setSprint(sprint) }
+            }
+        }
     }
 
     private func sprintLabel(_ sprint: SprintDTO) -> String {
@@ -420,6 +411,80 @@ struct UserLabel: View {
             AvatarView(url: user.avatar48.flatMap { URL(string: $0) }, kind: .comment, size: 20)
             Text(user.displayName ?? "?").font(.callout)
         }
+    }
+}
+
+// MARK: - Auswahl-Popover (wiederverwendbar)
+
+/// Einfach-/Mehrfachauswahl im Popover — dieselbe Optik für alle Detail-
+/// Dropdowns (bewusst statt `Menu`, dessen borderlessButton-Stil einen
+/// eigenen Indikator vor dem Label rendert).
+struct OptionsPopover: View {
+    struct Item: Identifiable {
+        let id: String
+        let label: String
+        var icon: String? = nil
+    }
+
+    let items: [Item]
+    let selectedIds: Set<String>
+    var multiSelect: Bool = false
+    /// „Nichts/entfernen"-Eintrag ganz oben (löst onChoose(nil) aus).
+    var clearLabel: String? = nil
+    var emptyLabel: String = "Keine Optionen"
+    /// id der Auswahl bzw. nil für den Clear-Eintrag. Bei Mehrfachauswahl
+    /// bleibt das Popover offen.
+    let onChoose: (String?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let clearLabel {
+                    row(label: clearLabel, icon: "xmark", selected: false) {
+                        onChoose(nil)
+                        if !multiSelect { dismiss() }
+                    }
+                    Divider()
+                }
+                if items.isEmpty {
+                    Text(emptyLabel)
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                }
+                ForEach(items) { item in
+                    row(label: item.label, icon: item.icon,
+                        selected: selectedIds.contains(item.id)) {
+                        onChoose(item.id)
+                        if !multiSelect { dismiss() }
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(width: 260)
+        .frame(maxHeight: 320)
+    }
+
+    private func row(label: String, icon: String?, selected: Bool,
+                     action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: selected ? "checkmark" : (icon ?? "circle"))
+                    .font(.caption)
+                    .frame(width: 16)
+                    .opacity(selected ? 1 : (icon != nil ? 0.7 : 0))
+                Text(label).font(.callout)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

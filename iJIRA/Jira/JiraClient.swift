@@ -129,6 +129,27 @@ struct JiraClient: Sendable {
                       as: SprintsResponse.self).values
     }
 
+    /// Aktive + geplante Sprints eines Boards (für die Sprint-Auswahl im Issue).
+    func selectableSprints(boardId: Int) async throws -> [SprintDTO] {
+        try await get("rest/agile/1.0/board/\(boardId)/sprint?state=active,future&maxResults=50",
+                      as: SprintsResponse.self).values
+    }
+
+    /// Issue in einen Sprint verschieben (setzt das Sprint-Feld zuverlässig,
+    /// anders als editIssue auf dem greenhopper-Custom-Field).
+    func moveIssueToSprint(sprintId: Int, issueKey: String) async throws {
+        try await sendNoContent(method: "POST",
+                                path: "rest/agile/1.0/sprint/\(sprintId)/issue",
+                                json: ["issues": [issueKey]])
+    }
+
+    /// Issue aus dem Sprint ins Backlog verschieben.
+    func moveIssueToBacklog(issueKey: String) async throws {
+        try await sendNoContent(method: "POST",
+                                path: "rest/agile/1.0/backlog/issue",
+                                json: ["issues": [issueKey]])
+    }
+
     /// Meine Issues im Sprint (Scrum-Boards).
     func mySprintIssues(sprintId: Int) async throws -> [BoardIssueDTO] {
         let jql = encodeJQL("assignee = currentUser() ORDER BY rank")

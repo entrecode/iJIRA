@@ -26,13 +26,25 @@ final class IssueDetailModel {
     /// Mögliche Workflow-Übergänge — fürs Status-Dropdown im Header.
     private(set) var availableTransitions: [TransitionDTO] = []
 
-    /// Team des Issues (Atlassian-Team-Custom-Field, Name via Raw-Fetch).
+    /// Team des Issues (Atlassian-Team-Custom-Field, via Raw-Fetch).
+    private(set) var teamId: String?
     private(set) var teamName: String?
+
+    /// Aktueller Sprint des Issues (greenhopper-Custom-Field, via Raw-Fetch).
+    private(set) var sprintId: Int?
+    private(set) var sprintName: String?
 
     /// Projekt-Versionen (Fix-Version-Dropdown) — lazy, gecacht.
     private(set) var projectVersions: [VersionDTO] = []
     /// Alle Labels der Site (Vorschläge im Labels-Editor) — lazy, gecacht.
     private(set) var allLabels: [String] = []
+    /// Editier-Kataloge des Projekts — lazy geladen (loadEditCatalogs).
+    private(set) var issueTypeOptions: [CreateMetaIssueType] = []
+    private(set) var componentOptions: [ProjectComponentDTO] = []
+    private(set) var availableSprints: [SprintDTO] = []
+
+    /// Team-Optionen + Feld-ID kommen aus dem zentral vorgeladenen Katalog.
+    var teamOptions: [CreateIssueService.TeamOption] { CreateIssueService.shared.teams }
 
     /// Thumbnail-Cache: Attachment-ID → Bild. Einträge entstehen lazy über
     /// `thumbnail(for:)`.
@@ -82,10 +94,15 @@ final class IssueDetailModel {
             Log.app.info("Issue \(self.issueKey, privacy: .public) geladen: \(self.comments.count) Kommentare, \(self.attachments.count) Anhänge, \(self.detail?.fields.issuelinks?.count ?? 0) Links")
             // Harvest-Summe parallel nachziehen (non-blocking, Nice-to-have).
             Task { await self.refreshLoggedTime() }
-            // Projekt/Typ/Team/Komponenten als „zuletzt angesehen"-Vorbelegung
-            // übernehmen; liefert nebenbei den Team-Namen für die Details.
+            // Team + Sprint (dynamische Custom Fields) via Raw-Fetch nachziehen;
+            // setzt nebenbei die Vorbelegung für den Neues-Issue-Dialog.
             Task {
-                self.teamName = await CreateIssueService.shared.captureViewedIssue(key: self.issueKey)
+                if let viewed = await CreateIssueService.shared.captureViewedIssue(key: self.issueKey) {
+                    self.teamId = viewed.teamId
+                    self.teamName = viewed.teamName
+                    self.sprintId = viewed.sprintId
+                    self.sprintName = viewed.sprintName
+                }
             }
             // Zuweisbare Personen im Hintergrund vorladen (fürs Dropdown).
             if assignableUsers.isEmpty {
@@ -168,6 +185,46 @@ final class IssueDetailModel {
         projectVersions = VersionDTO.sortedDescending(loaded)
     }
 
+    /// Kataloge für die editierbaren Detail-Felder (Fix Version, Issue-Type,
+    /// Components, Sprint) — einmalig pro Issue.
+    func loadEditCatalogs() async {
+        guard let projectKey = detail?.fields.project?.key else { return }
+        await loadProjectVersions()
+        if issueTypeOptions.isEmpty {
+            issueTypeOptions = await CreateIssueService.shared.issueTypes(projectKey: projectKey)
+        }
+        if componentOptions.isEmpty {
+            componentOptions = await CreateIssueService.shared.components(projectKey: projectKey)
+        }
+        await loadAvailableSprints(projectKey: projectKey)
+    }
+
+    /// Aktive + geplante Sprints der Boards des Projekts (Sprint-Auswahl).
+    private func loadAvailableSprints(projectKey: String) async {
+        guard availableSprints.isEmpty, let client else { return }
+        var boards = MainWindowController.shared?.boardStore.boards
+            .filter { $0.location?.projectKey == projectKey } ?? []
+        if boards.isEmpty {
+            boards = ((try? await client.allBoards()) ?? [])
+                .filter { $0.location?.projectKey == projectKey }
+        }
+        var collected: [SprintDTO] = []
+        var seen = Set<Int>()
+        for board in boards.prefix(4) where board.type != "kanban" {
+            let sprints = (try? await client.selectableSprints(boardId: board.id)) ?? []
+            for sprint in sprints where seen.insert(sprint.id).inserted {
+                collected.append(sprint)
+            }
+        }
+        // Aktive vor geplanten, innerhalb gleicher Gruppe nach Name.
+        availableSprints = collected.sorted { a, b in
+            let ra = a.state == "active" ? 0 : 1
+            let rb = b.state == "active" ? 0 : 1
+            if ra != rb { return ra < rb }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+    }
+
     func loadAllLabels() async {
         guard allLabels.isEmpty, let client else { return }
         allLabels = ((try? await client.allLabels()) ?? []).sorted()
@@ -190,6 +247,63 @@ final class IssueDetailModel {
     func setAssignee(_ user: UserDTO?) async -> Bool {
         await performEdit { client in
             try await client.assignIssue(key: self.issueKey, accountId: user?.accountId)
+        }
+    }
+
+    func setIssueType(id: String) async -> Bool {
+        await performEdit { client in
+            try await client.editIssue(key: self.issueKey, fields: ["issuetype": ["id": id]])
+        }
+    }
+
+    func setComponents(ids: [String]) async -> Bool {
+        await performEdit { client in
+            try await client.editIssue(key: self.issueKey,
+                                       fields: ["components": ids.map { ["id": $0] }])
+        }
+    }
+
+    /// Team setzen/entfernen. Das Team-Feld ist ein Custom Field mit dynamischer
+    /// ID; sein Wert ist die Team-ID (String). Detail-Refresh liest das Feld
+    /// nicht mit, daher aktualisieren wir Name/ID hier direkt.
+    func setTeam(_ team: CreateIssueService.TeamOption?) async -> Bool {
+        guard let teamFieldId = CreateIssueService.shared.teamFieldId else {
+            actionError = "Team-Feld nicht gefunden."
+            return false
+        }
+        let ok = await performEdit { client in
+            try await client.editIssue(key: self.issueKey,
+                                       fields: [teamFieldId: team?.id ?? NSNull()])
+        }
+        if ok {
+            teamId = team?.id
+            teamName = team?.name
+        }
+        return ok
+    }
+
+    /// Sprint zuweisen (`nil` = Backlog). Läuft über die Agile-Endpoints statt
+    /// editIssue — zuverlässiger fürs greenhopper-Feld.
+    func setSprint(_ sprint: SprintDTO?) async -> Bool {
+        guard let client else {
+            actionError = "Nicht mit Jira verbunden."
+            return false
+        }
+        actionError = nil
+        do {
+            if let sprint {
+                try await client.moveIssueToSprint(sprintId: sprint.id, issueKey: issueKey)
+            } else {
+                try await client.moveIssueToBacklog(issueKey: issueKey)
+            }
+            sprintId = sprint?.id
+            sprintName = sprint?.name
+            Log.app.info("Sprint \(self.issueKey, privacy: .public) → \(sprint?.name ?? "Backlog", privacy: .public)")
+            MainWindowController.shared?.boardStore.kickRefresh()
+            return true
+        } catch {
+            actionError = (error as? JiraError)?.userMessage ?? error.localizedDescription
+            return false
         }
     }
 

@@ -81,6 +81,7 @@ struct StatusCategoryDTO: Codable, Sendable {
 }
 
 struct IssueTypeDTO: Codable, Sendable {
+    let id: String?
     let name: String?
     let iconUrl: String?
 }

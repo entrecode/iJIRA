@@ -1,6 +1,16 @@
 import Foundation
 import Observation
 
+/// Dynamische Felder eines angesehenen Issues, die über die getypten DTOs
+/// nicht abgedeckt sind (Team + Sprint sind Custom Fields mit instanz-
+/// spezifischen IDs) — via Raw-Fetch gelesen.
+struct ViewedIssueFields {
+    var teamId: String?
+    var teamName: String?
+    var sprintId: Int?
+    var sprintName: String?
+}
+
 /// Alles rund ums Anlegen neuer Tickets: Projekt-/Typ-/Team-/Komponenten-
 /// Kataloge (vorgeladen bzw. gecacht) und die Vorbelegung — Werte kommen vom
 /// zuletzt ANGELEGTEN Ticket, sonst vom zuletzt ANGESEHENEN.
@@ -31,6 +41,8 @@ final class CreateIssueService {
     private(set) var teams: [TeamOption] = []
     private(set) var teamFieldId: String?
     private(set) var teamFieldName: String?
+    /// Custom-Field-ID des Sprint-Felds (greenhopper) — für Read der Detail-Ansicht.
+    private(set) var sprintFieldId: String?
 
     private(set) var lastCreated: Defaults?
     private(set) var lastViewed: Defaults?
@@ -59,7 +71,7 @@ final class CreateIssueService {
         if projects.isEmpty {
             projects = (try? await client.visibleProjects()) ?? []
         }
-        if teamFieldId == nil {
+        if teamFieldId == nil || sprintFieldId == nil {
             let fields = (try? await client.allFields()) ?? []
             // Das Atlassian-Team-Feld ist ein Custom Field (Typ "team" bzw.
             // rm-teams-…); Fallback: Feld, das schlicht "Team" heißt.
@@ -68,6 +80,10 @@ final class CreateIssueService {
             } ?? fields.first { $0.name == "Team" }
             teamFieldId = teamField?.id
             teamFieldName = teamField?.name
+            // Sprint-Feld (greenhopper).
+            sprintFieldId = fields.first {
+                $0.schema?.custom == "com.pyxis.greenhopper.jira:gh-sprint"
+            }?.id ?? fields.first { $0.name == "Sprint" }?.id
         }
         if teams.isEmpty, let fieldName = teamFieldName {
             let results = (try? await client.teamSuggestions(fieldName: fieldName, query: "")) ?? []
@@ -100,13 +116,15 @@ final class CreateIssueService {
     /// Beim Ansehen eines Issues dessen Projekt/Typ/Team/Komponenten als
     /// „zuletzt angesehen"-Vorbelegung übernehmen (ein kleiner Raw-Request,
     /// weil das Team-Feld eine dynamische Custom-Field-ID hat).
-    /// Gibt den Team-Namen des Issues zurück (für die Detail-Ansicht).
+    /// Liest Team + Sprint (dynamische Custom Fields) und merkt Projekt/Typ/
+    /// Team/Komponenten als „zuletzt angesehen"-Vorbelegung fürs Anlegen.
     @discardableResult
-    func captureViewedIssue(key: String) async -> String? {
+    func captureViewedIssue(key: String) async -> ViewedIssueFields? {
         guard let client = appState.currentClient(),
               let base = appState.siteBaseURL else { return nil }
         var fields = "project,components,issuetype"
         if let teamFieldId { fields += ",\(teamFieldId)" }
+        if let sprintFieldId { fields += ",\(sprintFieldId)" }
         guard let data = try? await client.fetchData(
                   from: base.absoluteString + "/rest/api/3/issue/\(key)?fields=\(fields)"),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -118,6 +136,7 @@ final class CreateIssueService {
         if let components = fieldsDict["components"] as? [[String: Any]] {
             defaults.componentIds = components.compactMap { $0["id"] as? String }
         }
+        var result = ViewedIssueFields()
         if let teamFieldId {
             if let team = fieldsDict[teamFieldId] as? [String: Any] {
                 defaults.teamId = team["id"] as? String
@@ -126,9 +145,20 @@ final class CreateIssueService {
                 defaults.teamId = teamId
             }
         }
+        result.teamId = defaults.teamId
+        result.teamName = defaults.teamName
+        // Sprint: Feld ist ein Array; aktueller Sprint = aktiv, sonst geplant,
+        // sonst der letzte Eintrag.
+        if let sprintFieldId, let sprints = fieldsDict[sprintFieldId] as? [[String: Any]] {
+            let chosen = sprints.first { ($0["state"] as? String) == "active" }
+                ?? sprints.first { ($0["state"] as? String) == "future" }
+                ?? sprints.last
+            result.sprintId = chosen?["id"] as? Int
+            result.sprintName = chosen?["name"] as? String
+        }
         lastViewed = defaults
         Self.persist(defaults, key: Self.lastViewedKey)
-        return defaults.teamName
+        return result
     }
 
     // MARK: - Anlegen

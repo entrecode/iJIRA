@@ -78,13 +78,13 @@ struct IssueMetaSection: View {
                     metaLabel("Assignee")
                     assigneeChip
                     metaLabel("Issue-Type")
-                    issueTypeValue
+                    issueTypeChip
                 }
                 GridRow {
                     metaLabel("Reporter")
                     reporterValue
                     metaLabel("Components")
-                    textValue(detail.fields.components?.map(\.name).joined(separator: ", "))
+                    componentsChip
                 }
                 GridRow {
                     metaLabel("Parent")
@@ -94,13 +94,166 @@ struct IssueMetaSection: View {
                 }
                 GridRow {
                     metaLabel("Team")
-                    textValue(model.teamName)
+                    teamChip
                     metaLabel("Fix Version")
                     fixVersionsChip
                 }
+                GridRow {
+                    metaLabel("Sprint")
+                    sprintChip
+                }
             }
         }
-        .task(id: detail.key) { await model.loadProjectVersions() }
+        .task(id: detail.key) { await model.loadEditCatalogs() }
+    }
+
+    /// Dezenter Auf-/Ab-Pfeil, der ein Feld als editierbar kennzeichnet.
+    private var editChevron: some View {
+        Image(systemName: "chevron.up.chevron.down")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+    }
+
+    // MARK: Issue-Type (editierbar)
+
+    private var issueTypeChip: some View {
+        Menu {
+            if model.issueTypeOptions.isEmpty {
+                Button("Lädt …") {}.disabled(true)
+            }
+            ForEach(model.issueTypeOptions) { type in
+                Button {
+                    Task { _ = await model.setIssueType(id: type.id) }
+                } label: {
+                    if type.id == detail.fields.issuetype?.id {
+                        Label(type.name, systemImage: "checkmark")
+                    } else {
+                        Text(type.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                IssueTypeIcon(typeName: detail.fields.issuetype?.name)
+                Text(detail.fields.issuetype?.name ?? "—").font(.callout)
+                editChevron
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("Issue-Type ändern")
+    }
+
+    // MARK: Components (editierbar, Mehrfachauswahl)
+
+    private var componentsChip: some View {
+        Menu {
+            if model.componentOptions.isEmpty {
+                Button("Keine Komponenten im Projekt") {}.disabled(true)
+            }
+            ForEach(model.componentOptions) { component in
+                Button {
+                    Task { await toggleComponent(component) }
+                } label: {
+                    if currentComponentIds.contains(component.id) {
+                        Label(component.name, systemImage: "checkmark")
+                    } else {
+                        Text(component.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                textValue(detail.fields.components?.map(\.name).joined(separator: ", "))
+                editChevron
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("Components ändern")
+    }
+
+    private var currentComponentIds: Set<String> {
+        Set((detail.fields.components ?? []).map(\.id))
+    }
+
+    private func toggleComponent(_ component: ProjectComponentDTO) async {
+        var ids = currentComponentIds
+        if ids.contains(component.id) {
+            ids.remove(component.id)
+        } else {
+            ids.insert(component.id)
+        }
+        _ = await model.setComponents(ids: Array(ids))
+    }
+
+    // MARK: Team (editierbar)
+
+    private var teamChip: some View {
+        Menu {
+            Button("Kein Team") {
+                Task { _ = await model.setTeam(nil) }
+            }
+            ForEach(model.teamOptions) { team in
+                Button {
+                    Task { _ = await model.setTeam(team) }
+                } label: {
+                    if team.id == model.teamId {
+                        Label(team.name, systemImage: "checkmark")
+                    } else {
+                        Text(team.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                textValue(model.teamName)
+                editChevron
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("Team ändern")
+    }
+
+    // MARK: Sprint (editierbar)
+
+    private var sprintChip: some View {
+        Menu {
+            Button("Kein Sprint (Backlog)") {
+                Task { _ = await model.setSprint(nil) }
+            }
+            if model.availableSprints.isEmpty {
+                Button("Keine Sprints verfügbar") {}.disabled(true)
+            }
+            ForEach(model.availableSprints) { sprint in
+                Button {
+                    Task { _ = await model.setSprint(sprint) }
+                } label: {
+                    if sprint.id == model.sprintId {
+                        Label(sprintLabel(sprint), systemImage: "checkmark")
+                    } else {
+                        Text(sprintLabel(sprint))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                textValue(model.sprintName)
+                editChevron
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("Sprint ändern")
+    }
+
+    private func sprintLabel(_ sprint: SprintDTO) -> String {
+        sprint.state == "future" ? "\(sprint.name) (geplant)" : sprint.name
     }
 
     // MARK: Labels (editierbar)
@@ -167,15 +320,6 @@ struct IssueMetaSection: View {
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-
-    private var issueTypeValue: some View {
-        HStack(spacing: 5) {
-            IssueTypeIcon(typeName: detail.fields.issuetype?.name)
-            Text(detail.fields.issuetype?.name ?? "—")
-                .font(.callout)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

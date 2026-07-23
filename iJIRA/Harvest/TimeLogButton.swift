@@ -11,7 +11,6 @@ struct TimeLogButton: View {
         if let harvest = HarvestState.shared, harvest.isConfigured {
             Button {
                 showPopover = true
-                Task { await model.refreshLoggedTime() }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
@@ -26,6 +25,11 @@ struct TimeLogButton: View {
                 TimeLogPopover(model: model, harvest: harvest) {
                     showPopover = false
                 }
+                // Refresh erst NACH der Präsentation: liefe er (wie früher) im
+                // Button-Action, würde das Aktualisieren von loggedHours das
+                // Anker-Label mitten in der Popover-Präsentation neu layouten —
+                // reentranter showRelativeToRect: → AppKit-Crash.
+                .task { await model.refreshLoggedTime() }
             }
         }
     }

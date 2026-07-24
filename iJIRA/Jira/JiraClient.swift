@@ -380,6 +380,25 @@ struct JiraClient: Sendable {
         return data
     }
 
+    /// Media-Services-UUID eines Anhangs — die ID, die ADF-`media`-Knoten
+    /// referenzieren (≠ Attachment-ID). Sie steht in keiner REST-Antwort,
+    /// aber der Content-Endpoint redirectet auf `…/file/<uuid>/binary`:
+    /// Redirect unterdrücken und die UUID aus dem Location-Header lesen.
+    /// Best effort — bei nil fällt der Aufrufer auf einen Link zurück.
+    func mediaUUID(forAttachmentId id: String) async -> String? {
+        guard var request = try? makeRequest("rest/api/3/attachment/content/\(id)") else { return nil }
+        request.httpMethod = "HEAD"
+        guard let (_, response) = try? await Self.session.data(for: request,
+                                                               delegate: NoRedirectDelegate()),
+              let http = response as? HTTPURLResponse,
+              (300..<400).contains(http.statusCode),
+              let location = http.value(forHTTPHeaderField: "Location"),
+              let range = location.range(of: "/file/")
+        else { return nil }
+        let uuid = location[range.upperBound...].prefix(while: { $0 != "/" && $0 != "?" })
+        return uuid.isEmpty ? nil : String(uuid)
+    }
+
     /// Changelog-Einträge — garantiert die *neuesten*. Jira paginiert den
     /// Changelog älteste zuerst; bei mehr Einträgen als `maxResults` muss
     /// deshalb die letzte Seite geholt werden, sonst sieht man bei
@@ -474,6 +493,14 @@ struct JiraClient: Sendable {
         let raw = "\(email):\(apiToken)"
         return "Basic " + Data(raw.utf8).base64EncodedString()
     }
+}
+
+/// Lässt URLSession dem Redirect NICHT folgen, damit die 3xx-Antwort samt
+/// Location-Header beim Aufrufer ankommt (Media-UUID-Ermittlung).
+private final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? { nil }
 }
 
 enum JiraError: Error {

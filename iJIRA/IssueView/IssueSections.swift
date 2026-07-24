@@ -1195,10 +1195,11 @@ struct IssueCommentsSection: View {
             ZStack(alignment: .topLeading) {
                 MarkdownTextEditor(text: $draft,
                                    controller: editorController,
-                                   onMentionQuery: { mentionQuery = $0 })
+                                   onMentionQuery: { mentionQuery = $0 },
+                                   onFileDrop: { urls in Task { await uploadDrop(urls) } })
                     .frame(height: 76)
                 if draft.isEmpty {
-                    Text("Kommentieren… (`code`, **fett**, *kursiv*, @Name, ONE-123)")
+                    Text("Kommentieren… (`code`, **fett**, *kursiv*, @Name, ONE-123, Bild/Datei hierher ziehen)")
                         .font(.body)
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 9)
@@ -1211,14 +1212,25 @@ struct IssueCommentsSection: View {
                                   controller: editorController)
             HStack {
                 Spacer()
+                if model.isUploading {
+                    ProgressView().controlSize(.small)
+                    Text("Lädt hoch…").font(.caption).foregroundStyle(.secondary)
+                }
                 if isSending { ProgressView().controlSize(.small) }
                 Button("Senden") {
                     Task { await send() }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                          || isSending || model.isUploading)
             }
         }
+    }
+
+    private func uploadDrop(_ urls: [URL]) async {
+        let tokens = await model.uploadFilesForComment(urls)
+        guard !tokens.isEmpty else { return }
+        draft = CommentMediaUpload.appending(tokens, to: draft)
     }
 
     private func send() async {

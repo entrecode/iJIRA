@@ -494,13 +494,7 @@ final class IssueDetailModel {
         defer { isUploading = false }
         actionError = nil
 
-        var files: [(filename: String, mimeType: String, data: Data)] = []
-        for url in urls {
-            guard let data = try? Data(contentsOf: url) else { continue }
-            let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
-                ?? "application/octet-stream"
-            files.append((url.lastPathComponent, mime, data))
-        }
+        let files = CommentMediaUpload.readFiles(urls)
         guard !files.isEmpty else {
             actionError = "Keine lesbaren Dateien im Drop."
             return
@@ -510,6 +504,31 @@ final class IssueDetailModel {
             await refresh()
         } catch {
             actionError = (error as? JiraError)?.userMessage ?? "Upload fehlgeschlagen."
+        }
+    }
+
+    /// Drop in den Kommentar-Editor: als Anhänge hochladen und Tokens für
+    /// den Entwurf liefern — beim Senden werden daraus eingebettete
+    /// Media-Knoten (Bilder/Videos inline im Kommentar).
+    func uploadFilesForComment(_ urls: [URL]) async -> [String] {
+        guard let client, !urls.isEmpty else { return [] }
+        isUploading = true
+        defer { isUploading = false }
+        actionError = nil
+        do {
+            let tokens = try await CommentMediaUpload.uploadTokens(
+                client: client, issueKey: issueKey, urls: urls)
+            guard !tokens.isEmpty else {
+                actionError = "Keine lesbaren Dateien im Drop."
+                return []
+            }
+            // Anhang-Liste aktualisieren — darüber löst das eigene Rendering
+            // die Media-Knoten (alt-Text → Anhang) auf.
+            await refresh()
+            return tokens
+        } catch {
+            actionError = (error as? JiraError)?.userMessage ?? "Upload fehlgeschlagen."
+            return []
         }
     }
 }

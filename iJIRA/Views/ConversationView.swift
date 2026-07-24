@@ -13,6 +13,7 @@ struct ConversationView: View {
     @Query private var items: [JiraNotification]
     @State private var replyText = ""
     @State private var isSending = false
+    @State private var isUploadingMedia = false
     @State private var sendError: String?
     @State private var mentionQuery: String?
     @State private var editorController = MarkdownEditorController()
@@ -128,10 +129,11 @@ struct ConversationView: View {
             ZStack(alignment: .topLeading) {
                 MarkdownTextEditor(text: $replyText,
                                    controller: editorController,
-                                   onMentionQuery: { mentionQuery = $0 })
+                                   onMentionQuery: { mentionQuery = $0 },
+                                   onFileDrop: { urls in Task { await uploadMedia(urls) } })
                     .frame(height: 64)
                 if replyText.isEmpty {
-                    Text("Antworten… (`code`, ```block```, **fett**, *kursiv*, @Name)")
+                    Text("Antworten… (`code`, **fett**, *kursiv*, @Name, Bild hierher ziehen)")
                         .font(.body)
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 9)
@@ -147,9 +149,14 @@ struct ConversationView: View {
                     Text(error).font(.caption2).foregroundStyle(.red).lineLimit(1)
                 }
                 Spacer()
+                if isUploadingMedia {
+                    ProgressView().controlSize(.small)
+                    Text("Lädt hoch…").font(.caption2).foregroundStyle(.secondary)
+                }
                 if isSending { ProgressView().controlSize(.small) }
                 Button("Senden") { Task { await sendReply() } }
-                    .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                    .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              || isSending || isUploadingMedia)
                     .keyboardShortcut(.return, modifiers: .command)
             }
         }
@@ -208,6 +215,26 @@ struct ConversationView: View {
     }
 
     // MARK: - Send
+
+    /// Datei-Drop in den Antwort-Editor: Upload als Anhang, Token in den
+    /// Entwurf (wird beim Senden zum eingebetteten Media-Knoten).
+    private func uploadMedia(_ urls: [URL]) async {
+        guard let client = appState.currentClient() else { return }
+        isUploadingMedia = true
+        defer { isUploadingMedia = false }
+        sendError = nil
+        do {
+            let tokens = try await CommentMediaUpload.uploadTokens(
+                client: client, issueKey: issueKey, urls: urls)
+            guard !tokens.isEmpty else {
+                sendError = "Keine lesbaren Dateien im Drop."
+                return
+            }
+            replyText = CommentMediaUpload.appending(tokens, to: replyText)
+        } catch {
+            sendError = (error as? JiraError)?.userMessage ?? "Upload fehlgeschlagen."
+        }
+    }
 
     private func sendReply() async {
         let trimmed = replyText.trimmingCharacters(in: .whitespacesAndNewlines)

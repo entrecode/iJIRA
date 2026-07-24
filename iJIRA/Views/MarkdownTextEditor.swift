@@ -20,6 +20,25 @@ final class MarkdownEditorController {
     }
 }
 
+/// NSTextView, der Datei-Drops abfängt: statt des Standardverhaltens
+/// (Pfad/Dateiname als Text einfügen) übergibt er die URLs dem Handler —
+/// der Composer lädt sie als Anhänge hoch.
+final class DropAwareTextView: NSTextView {
+    var onFileDrop: (([URL]) -> Void)?
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let onFileDrop,
+           let urls = sender.draggingPasteboard.readObjects(
+               forClasses: [NSURL.self],
+               options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            onFileDrop(urls)
+            return true
+        }
+        return super.performDragOperation(sender)
+    }
+}
+
 /// NSTextView-Wrapper mit Live-Markdown-Syntaxfärbung.
 /// Unterstützt dieselbe Syntax wie `markdownToADFBody`: ```blocks```, `code`,
 /// **fett**, *kursiv*, # Überschriften, Listen, @[Mention](id), [Link](url).
@@ -29,10 +48,13 @@ struct MarkdownTextEditor: NSViewRepresentable {
     var controller: MarkdownEditorController? = nil
     /// Meldet die aktive Mention-Query hinter „@" am Cursor (nil = keine).
     var onMentionQuery: ((String?) -> Void)? = nil
+    /// Optional: Datei-Drop (Upload als Anhang) statt Pfad-Einfügen.
+    var onFileDrop: (([URL]) -> Void)? = nil
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        guard let tv = scrollView.documentView as? NSTextView else { return scrollView }
+        let scrollView = DropAwareTextView.scrollableTextView()
+        guard let tv = scrollView.documentView as? DropAwareTextView else { return scrollView }
+        tv.onFileDrop = onFileDrop
 
         tv.delegate = context.coordinator
         tv.isRichText = true
@@ -54,6 +76,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let tv = scrollView.documentView as? NSTextView else { return }
         controller?.textView = tv
+        (tv as? DropAwareTextView)?.onFileDrop = onFileDrop
         guard tv.string != text else { return }
 
         let saved = tv.selectedRange()
@@ -144,6 +167,7 @@ private enum MDPattern {
     static let bold = try! NSRegularExpression(pattern: "\\*\\*[^\\*\n]+\\*\\*")
     static let italic = try! NSRegularExpression(pattern: "(?<!\\*)\\*(?!\\*)[^\\*\n]+\\*(?!\\*)")
     static let mention = try! NSRegularExpression(pattern: "@\\[[^\\]\n]+\\]\\([^)\n]+\\)")
+    static let mediaToken = try! NSRegularExpression(pattern: "!\\[[^\\]\n]*\\]\\(media:[^)\n]+\\)")
     static let heading = try! NSRegularExpression(pattern: "^#{1,6} .*$", options: .anchorsMatchLines)
     static let listMarker = try! NSRegularExpression(pattern: "^(- |\\* |\\d+\\. |> )", options: .anchorsMatchLines)
 }
@@ -197,6 +221,15 @@ private func applyMarkdownStyling(to tv: NSTextView) {
         guard let r = m?.range else { return }
         storage.addAttributes([
             .foregroundColor: NSColor.controlAccentColor,
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold),
+        ], range: r)
+    }
+
+    // Hochgeladene Medien (![Datei](media:uuid)) — als Objekt-Token färben
+    MDPattern.mediaToken.enumerateMatches(in: str, range: full) { m, _, _ in
+        guard let r = m?.range else { return }
+        storage.addAttributes([
+            .foregroundColor: NSColor.systemTeal,
             .font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold),
         ], range: r)
     }

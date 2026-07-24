@@ -77,6 +77,9 @@ private func parseBlocks(_ text: String, site: URL?) -> [[String: Any]] {
         } else if line.trimmingCharacters(in: .whitespaces) == "---" {
             result.append(["type": "rule"])
 
+        } else if let media = mediaSingles(from: line) {
+            result.append(contentsOf: media)
+
         } else if line.isEmpty {
             // Leerzeile trennt Absätze
 
@@ -85,7 +88,8 @@ private func parseBlocks(_ text: String, site: URL?) -> [[String: Any]] {
             var paraLines = [line]
             while let next = lines.first, !next.isEmpty, !next.hasPrefix("```"),
                   headingLevel(next) == nil, !isBulletLine(next),
-                  orderedText(next) == nil, !next.hasPrefix("> ") {
+                  orderedText(next) == nil, !next.hasPrefix("> "),
+                  mediaSingles(from: next) == nil {
                 paraLines.append(next)
                 lines = lines.dropFirst()
             }
@@ -122,6 +126,38 @@ private func headingLevel(_ line: String) -> (level: Int, text: String)? {
 
 private func isBulletLine(_ line: String) -> Bool {
     line.hasPrefix("- ") || line.hasPrefix("* ")
+}
+
+/// Media-Tokens aus dem Drop-Upload: eine Zeile, die nur aus
+/// `![alt](media:uuid)`-Tokens (+ Whitespace) besteht → je Token ein
+/// `mediaSingle`-Block. Die UUID stammt aus den Media-Services (siehe
+/// JiraClient.mediaUUID); der alt-Text trägt den Dateinamen.
+private let mediaLineRegex = try! NSRegularExpression(
+    pattern: "^\\s*(?:!\\[[^\\]]*\\]\\(media:[0-9a-fA-F-]+\\)\\s*)+$")
+private let mediaTokenRegex = try! NSRegularExpression(
+    pattern: "!\\[([^\\]]*)\\]\\(media:([0-9a-fA-F-]+)\\)")
+
+private func mediaSingles(from line: String) -> [[String: Any]]? {
+    let full = NSRange(line.startIndex..., in: line)
+    guard mediaLineRegex.firstMatch(in: line, range: full) != nil else { return nil }
+    var nodes: [[String: Any]] = []
+    mediaTokenRegex.enumerateMatches(in: line, range: full) { match, _, _ in
+        guard let match,
+              let altRange = Range(match.range(at: 1), in: line),
+              let idRange = Range(match.range(at: 2), in: line) else { return }
+        nodes.append([
+            "type": "mediaSingle",
+            "attrs": ["layout": "align-start"] as [String: Any],
+            "content": [[
+                "type": "media",
+                "attrs": ["type": "file",
+                          "id": String(line[idRange]),
+                          "collection": "",
+                          "alt": String(line[altRange])] as [String: Any],
+            ] as [String: Any]],
+        ])
+    }
+    return nodes.isEmpty ? nil : nodes
 }
 
 private func orderedText(_ line: String) -> String? {

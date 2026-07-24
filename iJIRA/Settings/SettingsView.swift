@@ -6,18 +6,32 @@ struct SettingsView: View {
     @Bindable var appState: AppState
 
     var body: some View {
-        TabView {
-            ConnectionSettingsView(appState: appState)
-                .tabItem { Label("Verbindung", systemImage: "link") }
-            HarvestSettingsView(harvest: HarvestState.shared)
-                .tabItem { Label("Harvest", systemImage: "clock") }
-            GeneralSettingsView()
-                .tabItem { Label("Allgemein", systemImage: "gearshape") }
+        VStack(spacing: 4) {
+            TabView {
+                ConnectionSettingsView(appState: appState)
+                    .tabItem { Label("Verbindung", systemImage: "link") }
+                HarvestSettingsView(harvest: HarvestState.shared)
+                    .tabItem { Label("Harvest", systemImage: "clock") }
+                GeneralSettingsView()
+                    .tabItem { Label("Allgemein", systemImage: "gearshape") }
+            }
+            Text("iJIRA \(Bundle.main.versionString)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
         .frame(width: 460)
         // Ohne Luft nach oben schneidet die Fensterkante die Tab-Buttons an.
         .padding(.top, 12)
         .padding(.bottom, 8)
+    }
+}
+
+extension Bundle {
+    /// „1.0.2 (42)" — Marketing-Version + Build-Nummer aus der Info.plist.
+    var versionString: String {
+        let version = infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
     }
 }
 

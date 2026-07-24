@@ -26,6 +26,14 @@ ZIP="$BUILD_DIR/$APP_NAME.zip"
 echo "==> Projekt generieren"
 xcodegen generate
 
+# Version aus Git: neuester Semver-Tag (Konvention: ohne v-Prefix) als
+# Marketing-Version, Commit-Count als monoton steigende Build-Nummer.
+# Überschreibt die Fallback-Werte aus project.yml — Releases können damit
+# nicht mehr von den Tags driften.
+VERSION="$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || echo "0.0.0")"
+BUILD_NUMBER="$(git rev-list --count HEAD)"
+echo "==> Version $VERSION (Build $BUILD_NUMBER)"
+
 # Prüfen ob Developer ID-Zertifikat vorhanden ist
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "Developer ID Application"; then
     HAS_CERT=true
@@ -46,12 +54,16 @@ if [ "$HAS_CERT" = true ]; then
       ENABLE_HARDENED_RUNTIME=YES \
       OTHER_CODE_SIGN_FLAGS="--timestamp" \
       CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
+      MARKETING_VERSION="$VERSION" \
+      CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
       -allowProvisioningUpdates clean build
 else
     xcodebuild -project "$APP_NAME.xcodeproj" -scheme "$APP_NAME" -configuration Release \
       -derivedDataPath "$BUILD_DIR" \
       CODE_SIGN_IDENTITY="-" \
       CODE_SIGN_STYLE=Manual \
+      MARKETING_VERSION="$VERSION" \
+      CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
       clean build
 fi
 

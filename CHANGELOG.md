@@ -9,6 +9,8 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+## [1.0.3] – 2026-07-24
+
 ### Neu
 
 - Bild-/Datei-Upload per Drag & Drop in die Kommentar-Editoren (Issue-Detail
@@ -85,7 +87,8 @@ Erstes Release: Menüleisten-App mit JIRA-Notifications als Messenger-artige
 Timeline, Antworten mit Markdown-Support (`code`, Code-Blöcke, **fett**,
 *kursiv*) und echten macOS-Push-Benachrichtigungen.
 
-[Unreleased]: https://github.com/entrecode/iJIRA/compare/1.0.2...HEAD
+[Unreleased]: https://github.com/entrecode/iJIRA/compare/1.0.3...HEAD
+[1.0.3]: https://github.com/entrecode/iJIRA/compare/1.0.2...1.0.3
 [1.0.2]: https://github.com/entrecode/iJIRA/compare/1.0.1...1.0.2
 [1.0.1]: https://github.com/entrecode/iJIRA/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/entrecode/iJIRA/releases/tag/1.0.0

@@ -563,7 +563,7 @@ struct LabelsEditorView: View {
         .padding(12)
         .frame(width: 300)
         .task {
-            focused = true
+            DispatchQueue.main.async { focused = true }
             await model.loadAllLabels()
         }
     }
@@ -675,7 +675,7 @@ struct FixVersionsEditorView: View {
         .padding(12)
         .frame(width: 300)
         .task {
-            focused = true
+            DispatchQueue.main.async { focused = true }
             await model.loadProjectVersions()
         }
     }
@@ -752,7 +752,12 @@ struct PersonPickerView: View {
             }
         }
         .frame(width: 260, height: 320)
-        .onAppear { focused = true }
+        .onAppear {
+            // Fokus erst nach dem Einblenden des Popovers setzen — synchrones
+            // Fokussieren während des Window-Orderings crasht AppKit (NSRemoteView
+            // der Eingabe-/Kandidatenliste ordert mitten im Zyklus on-screen).
+            DispatchQueue.main.async { focused = true }
+        }
     }
 
     private func row(icon: String, text: String, action: @escaping () -> Void) -> some View {
@@ -836,7 +841,12 @@ struct IssueSuggestionPicker: View {
             }
         }
         .frame(width: 320, height: 300)
-        .onAppear { focused = true }
+        .onAppear {
+            // Fokus erst nach dem Einblenden des Popovers setzen — synchrones
+            // Fokussieren während des Window-Orderings crasht AppKit (NSRemoteView
+            // der Eingabe-/Kandidatenliste ordert mitten im Zyklus on-screen).
+            DispatchQueue.main.async { focused = true }
+        }
         .onChange(of: query) { _, newValue in
             searchTask?.cancel()
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)

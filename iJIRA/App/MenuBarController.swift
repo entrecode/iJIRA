@@ -52,24 +52,69 @@ final class MenuBarController: NSObject {
         MenuBarController.shared = self
     }
 
+    /// Menüleisten-Icon im Stil des App-Icons: drei gestaffelte Winkel
+    /// („»" nach oben-rechts). Als Template gezeichnet, damit die Menüleiste
+    /// es systemkonform schwarz/weiß tinten kann.
+    static let statusBarIcon: NSImage = {
+        // Drei „⌐"-Winkel in 100er-Koordinaten (y nach unten): Ecke oben-rechts,
+        // horizontaler Arm nach links, vertikaler Arm nach unten.
+        let brackets: [(corner: CGPoint, h: CGFloat, v: CGFloat)] = [
+            (CGPoint(x: 70, y: 26), 44, 44),
+            (CGPoint(x: 58, y: 40), 39, 40),
+            (CGPoint(x: 46, y: 54), 34, 32),
+        ]
+        let stroke: CGFloat = 9  // Strichbreite im 100er-Space
+
+        // Gesamt-Bounds inkl. halber Strichbreite bestimmen …
+        var minX = CGFloat.greatestFiniteMagnitude, minY = minX
+        var maxX = -minX, maxY = -minX
+        for b in brackets {
+            minX = min(minX, b.corner.x - b.h); maxX = max(maxX, b.corner.x)
+            minY = min(minY, b.corner.y);       maxY = max(maxY, b.corner.y + b.v)
+        }
+        let pad = stroke / 2
+        minX -= pad; minY -= pad; maxX += pad; maxY += pad
+        let boxW = maxX - minX, boxH = maxY - minY
+
+        let image = NSImage(size: NSSize(width: 18, height: 16), flipped: false) { rect in
+            // Seitenverhältnis wahren, zentriert einpassen; y spiegeln
+            // (100er-Space ist top-down, NSImage bottom-up).
+            let scale = min(rect.width / boxW, rect.height / boxH)
+            let offX = rect.minX + (rect.width - boxW * scale) / 2
+            let offY = rect.minY + (rect.height - boxH * scale) / 2
+            func tx(_ x: CGFloat) -> CGFloat { offX + (x - minX) * scale }
+            func ty(_ y: CGFloat) -> CGFloat { offY + (maxY - y) * scale }
+
+            let path = NSBezierPath()
+            for b in brackets {
+                path.move(to: NSPoint(x: tx(b.corner.x - b.h), y: ty(b.corner.y)))
+                path.line(to: NSPoint(x: tx(b.corner.x),       y: ty(b.corner.y)))
+                path.line(to: NSPoint(x: tx(b.corner.x),       y: ty(b.corner.y + b.v)))
+            }
+            path.lineWidth = stroke * scale
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            NSColor.black.setStroke()
+            path.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
+
     /// Aktualisiert Icon + Zahl anhand der ungelesen-Anzahl.
     func updateBadge(unread: Int) {
         guard let button = statusItem.button else { return }
-        if unread > 0 {
-            button.image = NSImage(systemSymbolName: "bell.badge.fill",
-                                   accessibilityDescription: "iJIRA – \(unread) neue Benachrichtigungen")
-            button.title = " \(unread)"
-        } else {
-            button.image = NSImage(systemSymbolName: "bell", accessibilityDescription: "iJIRA")
-            button.title = ""
-        }
-        button.image?.isTemplate = true
+        button.image = Self.statusBarIcon
+        button.image?.accessibilityDescription = unread > 0
+            ? "iJIRA – \(unread) neue Benachrichtigungen"
+            : "iJIRA"
+        button.title = unread > 0 ? " \(unread)" : ""
     }
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        button.image = NSImage(systemSymbolName: "bell", accessibilityDescription: "iJIRA")
-        button.image?.isTemplate = true
+        button.image = Self.statusBarIcon
         button.target = self
         button.action = #selector(togglePopover(_:))
         // Nie Tastaturfokus auf den Status-Button: sonst kann die Leertaste

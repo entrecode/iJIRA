@@ -61,6 +61,7 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
         window.title = key
         window.identifier = NSUserInterfaceItemIdentifier("issue-\(key)")
         window.isReleasedWhenClosed = false
+        window.applyTransparentBackdrop()
         window.setContentSize(NSSize(width: 720, height: 780))
         window.minSize = NSSize(width: 560, height: 480)
         window.center()

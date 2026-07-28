@@ -446,21 +446,6 @@ struct ErrorToast: View {
 
 // MARK: - Design-Helfer
 
-/// Frosted-Backdrop hinter dem Fensterinhalt.
-struct WindowBackdrop: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        // .sidebar ist deutlich durchscheinender als .underWindowBackground —
-        // Desktop/Fenster dahinter schimmern durch (moderner, weniger grau).
-        view.material = .sidebar
-        view.blendingMode = .behindWindow
-        view.state = .followsWindowActiveState
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
-}
-
 extension View {
     /// Liquid-Glass-Kapsel auf macOS 26+, Material-Fallback davor.
     @ViewBuilder
@@ -498,7 +483,7 @@ struct SectionCard<Content: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
+        .panelFill(.background, base: 0.3, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary.opacity(0.5), lineWidth: 1))
     }
 }

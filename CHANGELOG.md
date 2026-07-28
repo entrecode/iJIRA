@@ -9,6 +9,21 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Verbessert
+
+- **Mehr Glas:** Der Fenster-Hintergrund nutzt jetzt das dünnste
+  System-Material statt `.sidebar` — der Desktop scheint deutlich stärker
+  durch, bleibt dabei aber unscharf. Die Panels darauf (Themen- und
+  Sektions-Karten, Board-Spalten, Issue-Karten) sind 10 % durchscheinender;
+  bewusst viel weniger als der Hintergrund, weil darüber Text lesbar bleiben
+  muss.
+
+### Behoben
+
+- Der Frost-Effekt verschwand, sobald das Fenster den Fokus verlor (etwa weil
+  das Einstellungs-Fenster davor lag): Das Material wechselte dann auf sein
+  flaches, deckendes „inactive"-Aussehen.
+
 ## [1.0.4] – 2026-07-28
 
 ### Neu

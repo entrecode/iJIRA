@@ -84,6 +84,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.title = "iJIRA"
         window.identifier = NSUserInterfaceItemIdentifier("main")
         window.isReleasedWhenClosed = false
+        window.applyTransparentBackdrop()
         window.setContentSize(NSSize(width: 1080, height: 760))
         window.minSize = NSSize(width: 900, height: 640)
         window.center()

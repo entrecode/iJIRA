@@ -295,7 +295,7 @@ private struct ReviewThemeCard: View {
                 .padding(.vertical, 4)
             }
         }
-        .background(.background.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+        .panelFill(.background, base: 0.3, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary.opacity(0.5), lineWidth: 1))
     }
 

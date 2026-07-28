@@ -127,6 +127,12 @@ struct IssueLinkDTO: Decodable, Sendable, Identifiable {
     let outwardIssue: LinkedIssueDTO?
 
     /// Das verlinkte Gegenüber inkl. Richtungs-Beschriftung ("blocks", …).
+    ///
+    /// Jira projiziert im `issuelinks` eines Issues nur die *andere* Seite —
+    /// unter dem Schlüssel ihrer Rolle im Link-Objekt. Steht der Partner unter
+    /// `outwardIssue`, ist dieses Issue die inward-Seite und damit die aktive:
+    /// Beschriftung `type.outward` ("blocks"). Siehe auch
+    /// `JiraClient.createIssueLink`.
     var other: (issue: LinkedIssueDTO, label: String)? {
         if let outwardIssue { return (outwardIssue, type.outward ?? type.name ?? "verlinkt") }
         if let inwardIssue { return (inwardIssue, type.inward ?? type.name ?? "verlinkt") }

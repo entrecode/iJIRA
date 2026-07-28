@@ -1113,7 +1113,8 @@ private struct AddLinkButton: View {
         model.linkTypes.flatMap { type -> [LinkOption] in
             guard let name = type.name else { return [] }
             var result: [LinkOption] = []
-            // Label „blocks" = dieses Issue ist die outward-Seite des Links.
+            // Label „blocks" ⇒ dieses Issue blockt das andere. Auf welche Seite
+            // des Link-Objekts das führt, klärt `IssueDetailModel.addLink`.
             if let outward = type.outward {
                 result.append(LinkOption(typeName: name, label: outward, direction: .outward))
             }

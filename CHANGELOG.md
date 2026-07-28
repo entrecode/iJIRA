@@ -20,6 +20,9 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ### Behoben
 
+- **Verknüpfungen wurden in der falschen Richtung angelegt:** „ONE-1 blocks …"
+  ergab eine Verknüpfung „ONE-1 is blocked by …". Alle Beziehungen waren beim
+  Hinzufügen vertauscht; die Anzeige bestehender Verknüpfungen war korrekt.
 - Der Frost-Effekt verschwand, sobald das Fenster den Fokus verlor (etwa weil
   das Einstellungs-Fenster davor lag): Das Material wechselte dann auf sein
   flaches, deckendes „inactive"-Aussehen.

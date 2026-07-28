@@ -410,6 +410,18 @@ struct JiraClient: Sendable {
         try await get("rest/api/3/issueLinkType", as: IssueLinkTypesResponse.self).issueLinkTypes
     }
 
+    /// Verknüpfung anlegen. **Achtung, kontraintuitiv:** Die `inward`-Seite ist
+    /// die *aktive*. Für den Typ „Blocks" (`outward` = "blocks",
+    /// `inward` = "is blocked by") gilt:
+    ///
+    ///     inwardKey = A, outwardKey = B   ⇒   „A blocks B" / „B is blocked by A"
+    ///
+    /// Live gegen `dein-team.atlassian.net` verifiziert: Bei einer
+    /// bestehenden Verknüpfung ONE-9803 → ONE-9804 liefert GET auf ONE-9803 den
+    /// Partner unter `outwardIssue` (Anzeige „blocks"), GET auf ONE-9804 unter
+    /// `inwardIssue` (Anzeige „is blocked by") — das Link-Objekt ist also
+    /// `{inward: 9803, outward: 9804}` und bedeutet „9803 blockt 9804".
+    /// POST benutzt dieselben Rollen wie GET.
     func createIssueLink(typeName: String, inwardKey: String, outwardKey: String) async throws {
         try await sendNoContent(method: "POST", path: "rest/api/3/issueLink", json: [
             "type": ["name": typeName],

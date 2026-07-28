@@ -314,15 +314,22 @@ final class IssueDetailModel {
         }
     }
 
+    /// `direction` bezieht sich auf die im Picker gewählte Beschriftung:
+    /// `.outward` = die `outward`-Formulierung des Typs („blocks"), also
+    /// „dieses Issue blockt das andere".
+    ///
+    /// Die Zuordnung auf Jiras `inwardIssue`/`outwardIssue` ist dabei
+    /// kontraintuitiv — siehe `JiraClient.createIssueLink`: Die **inward**-Seite
+    /// ist die aktive („A blocks B" ⇒ inward = A, outward = B).
     func addLink(typeName: String, direction: LinkDirection, otherKey: String) async -> Bool {
         await performEdit { client in
             switch direction {
             case .outward:
                 try await client.createIssueLink(typeName: typeName,
-                                                 inwardKey: otherKey, outwardKey: self.issueKey)
+                                                 inwardKey: self.issueKey, outwardKey: otherKey)
             case .inward:
                 try await client.createIssueLink(typeName: typeName,
-                                                 inwardKey: self.issueKey, outwardKey: otherKey)
+                                                 inwardKey: otherKey, outwardKey: self.issueKey)
             }
         }
     }

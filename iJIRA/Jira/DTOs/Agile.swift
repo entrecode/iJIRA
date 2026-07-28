@@ -47,6 +47,9 @@ struct SprintDTO: Decodable, Sendable, Identifiable {
     let state: String?
     let startDate: String?
     let endDate: String?
+
+    var start: Date? { startDate.flatMap { JiraDate.parseLoose($0) } }
+    var end: Date? { endDate.flatMap { JiraDate.parseLoose($0) } }
 }
 
 struct SprintsResponse: Decodable, Sendable {
@@ -68,6 +71,11 @@ struct BoardIssueDTO: Codable, Sendable, Identifiable {
         let status: Status?
         let priority: PriorityDTO?
         let issuetype: IssueTypeDTO?
+        /// Nur für „Review & Plan" angefragt — Board-Fetches lassen die drei
+        /// leer (deshalb optional; alte Snapshot-Caches decodieren weiter).
+        let parent: ParentRefDTO?
+        let timespent: Int?
+        let worklog: WorklogPageDTO?
     }
 
     /// Status inkl. ID (die Detail-DTOs brauchen sie nicht, das Board schon —
@@ -79,6 +87,45 @@ struct BoardIssueDTO: Codable, Sendable, Identifiable {
     }
 
     var updatedDate: Date? { fields.updated.flatMap { JiraDate.parse($0) } }
+}
+
+// MARK: - Hierarchie & Worklogs (für „Review & Plan")
+
+/// Übergeordnetes Issue, wie Jira es in `fields.parent` mitliefert: Story über
+/// einer Sub-Task, Epic über einer Story. Enthält genug für die Themen-Zuordnung
+/// und die zusammengefasste Zeile, ohne das Parent extra laden zu müssen — das
+/// *Groß*eltern-Issue (Epic über einer Story) fehlt allerdings und wird bei
+/// Bedarf nachgeladen.
+struct ParentRefDTO: Codable, Sendable {
+    let key: String
+    let fields: Fields?
+
+    struct Fields: Codable, Sendable {
+        let summary: String?
+        let status: BoardIssueDTO.Status?
+        let issuetype: IssueTypeDTO?
+    }
+}
+
+/// `fields.worklog` der Issue-Suche — bzw. eine Seite von
+/// GET /issue/{key}/worklog. Die Suche liefert inline nur die ersten 20
+/// Einträge (`maxResults`), daher der Vergleich `total` vs. `worklogs.count`.
+struct WorklogPageDTO: Codable, Sendable {
+    let total: Int?
+    let maxResults: Int?
+    let worklogs: [WorklogEntryDTO]
+
+    /// Es fehlen Einträge → Nachladen über den Worklog-Endpoint nötig.
+    var isTruncated: Bool { (total ?? worklogs.count) > worklogs.count }
+}
+
+struct WorklogEntryDTO: Codable, Sendable {
+    let id: String?
+    /// Zeitpunkt, für den die Zeit gebucht wurde (nicht wann sie erfasst wurde).
+    let started: String?
+    let timeSpentSeconds: Int?
+
+    var startedDate: Date? { started.flatMap { JiraDate.parse($0) } }
 }
 
 struct PriorityDTO: Codable, Sendable {

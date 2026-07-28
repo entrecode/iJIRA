@@ -1,16 +1,17 @@
 import Foundation
 import Observation
 
-/// Zustand des Hauptfensters: aktiver Tab (Board ⇄ Issue), aktuelles Issue
-/// und ein kleiner LRU-Cache der Issue-Modelle, damit das Zurückwechseln zu
-/// kürzlich offenen Issues sofort rendert (Thumbnails, Kommentare etc.
-/// bleiben im Speicher).
+/// Zustand des Hauptfensters: aktiver Tab (Board ⇄ Issue ⇄ Review & Plan),
+/// aktuelles Issue und ein kleiner LRU-Cache der Issue-Modelle, damit das
+/// Zurückwechseln zu kürzlich offenen Issues sofort rendert (Thumbnails,
+/// Kommentare etc. bleiben im Speicher).
 @MainActor
 @Observable
 final class MainWindowModel {
     enum Tab: String {
         case board
         case issue
+        case review
     }
 
     var tab: Tab {

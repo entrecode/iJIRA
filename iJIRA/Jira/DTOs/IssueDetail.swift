@@ -84,6 +84,22 @@ struct IssueTypeDTO: Codable, Sendable {
     let id: String?
     let name: String?
     let iconUrl: String?
+    /// Jira-Hierarchie: -1 = Sub-Task, 0 = Story/Bug/Task, 1+ = Epic und
+    /// darüber. Sprachunabhängig — deshalb Vorrang vor dem Typnamen.
+    let hierarchyLevel: Int?
+    let subtask: Bool?
+
+    var isSubtask: Bool {
+        if let hierarchyLevel { return hierarchyLevel < 0 }
+        if let subtask { return subtask }
+        return ["sub-task", "subtask", "unteraufgabe"].contains(name?.lowercased() ?? "")
+    }
+
+    /// Epic-Ebene oder höher — die Ebene, auf der wir „Themen" gruppieren.
+    var isEpicLevel: Bool {
+        if let hierarchyLevel { return hierarchyLevel >= 1 }
+        return name?.lowercased() == "epic"
+    }
 }
 
 struct ProjectRefDTO: Decodable, Sendable {

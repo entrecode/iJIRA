@@ -9,6 +9,26 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Neu
+
+- **Dritter Bereich „Review & Plan"** (⌘3) für Sprint Review und Planning, in
+  drei Blöcken untereinander:
+  - **Aktueller Sprint** — meine Issues des laufenden Sprints, gruppiert nach
+    Thema (Epic), Themen absteigend nach der *in diesem Sprint* geloggten Zeit.
+    Pro Thema getrennt in „fertig" (die beiden hintersten Board-Spalten) und
+    „nicht fertig", mit Fertigstand-Balken. Zeiten kommen aus **Harvest**, wenn
+    Harvest konfiguriert ist (Zuordnung wie beim Zeit-Button: `external_reference`
+    oder Jira-Key in der Notiz), sonst aus den Jira-Worklogs — immer begrenzt auf
+    den Sprintzeitraum (ganze Tage, Europe/Berlin). Die verwendete Quelle steht
+    in der Ansicht.
+  - **Nächster Sprint** — was im nächsten geplanten Sprint liegt, ebenfalls nach
+    Themen, ohne fertig/nicht-fertig.
+  - **Nicht eingeplant** — meine offenen Issues, die in keinem laufenden *oder*
+    geplanten Sprint sind.
+  Sub-Tasks bekommen keine eigene Zeile, sondern rollen mit ihrer Zeit in ihr
+  Parent-Issue und lassen sich dort aufklappen. Themen sind einklappbar. Die
+  Ansicht lädt beim Öffnen bzw. per ⌘R und wird als Snapshot zwischengespeichert.
+
 ## [1.0.3] – 2026-07-24
 
 ### Neu

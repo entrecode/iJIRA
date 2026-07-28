@@ -140,6 +140,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainWindowController.shared.showIssueTab()
     }
 
+    @objc func showReviewTab(_ sender: Any?) {
+        MainWindowController.shared.showReviewTab()
+    }
+
     @objc func refreshCurrentTab(_ sender: Any?) {
         MainWindowController.shared.refreshCurrentTab()
     }

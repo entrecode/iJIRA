@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Inhalt des Hauptfensters: Header mit Board/Issue-Umschalter und dem
+/// Inhalt des Hauptfensters: Header mit Board/Issue/Review-Umschalter und dem
 /// immer sichtbaren Suchfeld, darunter der aktive Tab.
 struct MainWindowView: View {
     @Bindable var model: MainWindowModel
     @Bindable var boardStore: BoardStore
+    @Bindable var reviewStore: ReviewStore
 
     var body: some View {
         ZStack {
@@ -36,10 +37,11 @@ struct MainWindowView: View {
             Picker("Ansicht", selection: $model.tab) {
                 Text("Board").tag(MainWindowModel.Tab.board)
                 Text("Issue").tag(MainWindowModel.Tab.issue)
+                Text("Review & Plan").tag(MainWindowModel.Tab.review)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 190)
+            .frame(width: 300)
 
             Spacer()
 
@@ -90,6 +92,9 @@ struct MainWindowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .issue:
             issueContent
+        case .review:
+            ReviewView(store: reviewStore)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

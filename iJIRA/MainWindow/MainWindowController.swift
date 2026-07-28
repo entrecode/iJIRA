@@ -13,6 +13,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
 
     let model: MainWindowModel
     let boardStore: BoardStore
+    let reviewStore: ReviewStore
     private var window: NSWindow?
 
     /// Vor dem Anzeigen aufgerufen (z. B. Menüleisten-Popover schließen).
@@ -21,6 +22,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     private init(appState: AppState, directory: UserDirectory, boardStore: BoardStore) {
         model = MainWindowModel(appState: appState, directory: directory)
         self.boardStore = boardStore
+        reviewStore = ReviewStore(appState: appState, boardStore: boardStore)
         super.init()
     }
 
@@ -42,6 +44,11 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         model.tab = .issue
     }
 
+    func showReviewTab() {
+        show()
+        model.tab = .review
+    }
+
     func showIssue(key: String) {
         show()
         model.openIssue(key)
@@ -61,11 +68,15 @@ final class MainWindowController: NSObject, NSWindowDelegate {
             }
         case .board:
             boardStore.kickRefresh()
+        case .review:
+            reviewStore.kickRefresh()
         }
     }
 
     private func makeWindow() -> NSWindow {
-        let hosting = NSHostingController(rootView: MainWindowView(model: model, boardStore: boardStore))
+        let hosting = NSHostingController(rootView: MainWindowView(model: model,
+                                                                  boardStore: boardStore,
+                                                                  reviewStore: reviewStore))
         let window = NSWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true

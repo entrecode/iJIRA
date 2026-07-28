@@ -74,6 +74,10 @@ enum MainMenu {
                                action: #selector(AppDelegate.showIssueTab(_:)), keyEquivalent: "2")
         issue.target = target
         viewMenu.addItem(issue)
+        let review = NSMenuItem(title: "Review & Plan",
+                                action: #selector(AppDelegate.showReviewTab(_:)), keyEquivalent: "3")
+        review.target = target
+        viewMenu.addItem(review)
         viewMenu.addItem(.separator())
         let refresh = NSMenuItem(title: "Aktualisieren",
                                  action: #selector(AppDelegate.refreshCurrentTab(_:)), keyEquivalent: "r")

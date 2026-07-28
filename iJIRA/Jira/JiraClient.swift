@@ -129,6 +129,13 @@ struct JiraClient: Sendable {
                       as: SprintsResponse.self).values
     }
 
+    /// Geplante (noch nicht gestartete) Sprints eines Boards — in Board-
+    /// Reihenfolge, der erste ist also der nächste.
+    func futureSprints(boardId: Int) async throws -> [SprintDTO] {
+        try await get("rest/agile/1.0/board/\(boardId)/sprint?state=future&maxResults=50",
+                      as: SprintsResponse.self).values
+    }
+
     /// Aktive + geplante Sprints eines Boards (für die Sprint-Auswahl im Issue).
     func selectableSprints(boardId: Int) async throws -> [SprintDTO] {
         try await get("rest/agile/1.0/board/\(boardId)/sprint?state=active,future&maxResults=50",
@@ -182,6 +189,80 @@ struct JiraClient: Sendable {
 
     private func encodeJQL(_ jql: String) -> String {
         jql.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? jql
+    }
+
+    // MARK: - Review & Plan
+
+    /// Wie `boardIssueFields`, plus Hierarchie und Zeiten. `worklog` kommt
+    /// inline mit (die ersten 20 Einträge) — das erspart einen Request pro
+    /// Issue; der Rest wird bei Bedarf über `worklogs(issueKey:startedAfter:)`
+    /// nachgeladen.
+    private static let reviewIssueFields =
+        ["summary", "updated", "status", "priority", "issuetype", "parent", "timespent", "worklog"]
+
+    /// Ohne Worklogs — für die Planungs-Abschnitte, wo keine Zeiten angezeigt
+    /// werden (spart die deutlich größere Antwort).
+    private static let planIssueFields =
+        ["summary", "updated", "status", "priority", "issuetype", "parent"]
+
+    /// Meine Issues eines bestimmten Sprints, inkl. Parent und Worklogs.
+    /// Bewusst über `search/jql` statt den Agile-Endpoint: nur die Suche
+    /// liefert `worklog` als Feld mit.
+    func myIssues(sprintId: Int, includeWorklogs: Bool) async throws -> [BoardIssueDTO] {
+        try await searchAllPages(
+            jql: "sprint = \(sprintId) AND assignee = currentUser() ORDER BY rank",
+            fields: includeWorklogs ? Self.reviewIssueFields : Self.planIssueFields)
+    }
+
+    /// Meine offenen Issues, die in *keinem* Sprint eingeplant sind — weder in
+    /// einem laufenden noch in einem geplanten.
+    func myUnplannedIssues() async throws -> [BoardIssueDTO] {
+        try await searchAllPages(
+            jql: "assignee = currentUser() AND statusCategory != Done"
+                + " AND (sprint is EMPTY OR (sprint not in openSprints() AND sprint not in futureSprints()))"
+                + " ORDER BY updated DESC",
+            fields: Self.planIssueFields)
+    }
+
+    /// Issues per Key nachladen — für die Themen-Auflösung: über einer Sub-Task
+    /// steht eine Story, das Epic („Thema") ist erst deren Parent.
+    func issues(keys: [String]) async throws -> [BoardIssueDTO] {
+        guard !keys.isEmpty else { return [] }
+        var result: [BoardIssueDTO] = []
+        // JQL-Längenlimit respektieren: in Blöcken abfragen.
+        for chunk in stride(from: 0, to: keys.count, by: 80).map({
+            Array(keys[$0..<min($0 + 80, keys.count)])
+        }) {
+            let list = chunk.map { "\"\($0)\"" }.joined(separator: ",")
+            result += try await searchAllPages(jql: "key in (\(list))",
+                                               fields: ["summary", "status", "issuetype", "parent"])
+        }
+        return result
+    }
+
+    /// Worklogs eines Issues ab einem Zeitpunkt — Nachschlag für Issues mit
+    /// mehr als 20 Einträgen (mehr liefert die Suche nicht inline).
+    func worklogs(issueKey: String, startedAfter: Date) async throws -> [WorklogEntryDTO] {
+        let millis = Int(startedAfter.timeIntervalSince1970 * 1000)
+        return try await get(
+            "rest/api/3/issue/\(issueKey)/worklog?startedAfter=\(millis)&maxResults=1000",
+            as: WorklogPageDTO.self).worklogs
+    }
+
+    private func searchAllPages(jql: String, fields: [String],
+                                pageSize: Int = 100, maxPages: Int = 8) async throws -> [BoardIssueDTO] {
+        var all: [BoardIssueDTO] = []
+        var nextPageToken: String?
+        for _ in 0..<maxPages {
+            var body: [String: Any] = ["jql": jql, "maxResults": pageSize, "fields": fields]
+            if let nextPageToken { body["nextPageToken"] = nextPageToken }
+            let page: BoardIssuesResponse = try await post("rest/api/3/search/jql", json: body,
+                                                           as: BoardIssuesResponse.self)
+            all += page.issues
+            guard page.isLast != true, let token = page.nextPageToken else { break }
+            nextPageToken = token
+        }
+        return all
     }
 
     // MARK: - Transitions (Statuswechsel)

@@ -38,6 +38,7 @@ struct IssueDetailContent: View {
             // Browse-Links (Ticket-Karten, Kommentar-Links) öffnen die
             // Detailview statt des Browsers; alles andere geht ins System.
             .environment(\.openURL, OpenURLAction { url in
+                Log.app.info("Link-Klick: \(url.absoluteString, privacy: .public)")
                 if url.absoluteString.contains("/browse/"),
                    let key = JiraKeyParser.key(from: url.lastPathComponent) {
                     IssueWindowManager.shared.open(issueKey: key)

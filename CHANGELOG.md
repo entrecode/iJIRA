@@ -20,6 +20,11 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ### Behoben
 
+- **Links in Beschreibungen und Kommentaren:** Smart Links zeigten einen
+  kryptischen Text (`F7AA484D-744` statt `admin.appsite.de`) — die
+  Key-Erkennung hatte eine UUID in der URL als Jira-Key gelesen. Und sie waren
+  kaum anklickbar: Links liegen jetzt als Chip mit großzügiger Trefferfläche
+  vor, statt als Link innerhalb eines Textabsatzes.
 - **Verknüpfungen wurden in der falschen Richtung angelegt:** „ONE-1 blocks …"
   ergab eine Verknüpfung „ONE-1 is blocked by …". Alle Beziehungen waren beim
   Hinzufügen vertauscht; die Anzeige bestehender Verknüpfungen war korrekt.

@@ -33,9 +33,7 @@ struct ADFContentView: View {
     private func blockView(_ node: ADFNode) -> AnyView {
         switch node.type {
         case "paragraph":
-            let text = inlineText(node.content ?? [])
-            if text.characters.isEmpty { return AnyView(EmptyView()) }
-            return AnyView(Text(text).textSelection(.enabled))
+            return paragraphView(node.content ?? [])
 
         case "heading":
             let text = inlineText(node.content ?? [])
@@ -172,6 +170,76 @@ struct ADFContentView: View {
         )
     }
 
+    // MARK: - Absätze (Zeilen, Links als Chip)
+
+    /// Ein Absatz wird an seinen `hardBreak`s in Zeilen geschnitten. Zeilen,
+    /// die nur aus einem Link bestehen, werden als Chip gerendert — alle
+    /// anderen als Text wie bisher.
+    ///
+    /// Grund für den Chip: Ein Link in einem `AttributedString` feuert nur bei
+    /// einem bewegungsfreien Klick. Gemessen mit synthetischen Klicks à 6 px
+    /// Bewegung: Text-Link 1 von 10, `Link`-View 10 von 10 — von Hand ist der
+    /// Text-Link also praktisch nicht zu treffen.
+    ///
+    /// Der Schnitt auf Zeilenebene (nicht auf Absatzebene) ist nötig, weil
+    /// Jira Smart Links gern per `hardBreak` an einen Textabsatz hängt statt
+    /// einen eigenen Absatz anzulegen.
+    private func paragraphView(_ nodes: [ADFNode]) -> AnyView {
+        let lines = splitAtHardBreaks(nodes)
+        let blocks: [AnyView] = lines.compactMap { line in
+            if let link = soleLink(in: line) {
+                return AnyView(LinkChip(url: link.url, label: link.label))
+            }
+            let text = inlineText(line)
+            if text.characters.isEmpty { return nil }
+            return AnyView(Text(text).textSelection(.enabled))
+        }
+        guard !blocks.isEmpty else { return AnyView(EmptyView()) }
+        if blocks.count == 1 { return blocks[0] }
+        return AnyView(
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                    block
+                }
+            }
+        )
+    }
+
+    private func splitAtHardBreaks(_ nodes: [ADFNode]) -> [[ADFNode]] {
+        var lines: [[ADFNode]] = [[]]
+        for node in nodes {
+            if node.type == "hardBreak" {
+                lines.append([])
+            } else {
+                lines[lines.count - 1].append(node)
+            }
+        }
+        return lines
+    }
+
+    /// Der einzige inhaltstragende Knoten der Zeile ist ein Link. Reine
+    /// Leerzeichen-Textknoten zählen nicht mit; Jira legt um Smart Links gern
+    /// welche ab.
+    private func soleLink(in nodes: [ADFNode]) -> (url: URL, label: String)? {
+        let meaningful = nodes.filter { node in
+            guard node.type == "text" else { return true }
+            return !(node.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard meaningful.count == 1, let node = meaningful.first else { return nil }
+
+        if node.type == "inlineCard", let raw = node.attrs?.url, let url = URL(string: raw) {
+            return (url, JiraKeyParser.directKey(from: raw) ?? url.host ?? raw)
+        }
+        if node.type == "text",
+           let mark = node.marks?.first(where: { $0.type == "link" }),
+           let raw = mark.attrs?.href ?? mark.attrs?.url,
+           let url = URL(string: raw) {
+            let text = (node.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return (url, text.isEmpty ? (url.host ?? raw) : text)
+        }
+        return nil
+    }
+
     // MARK: - Inline
 
     private func inlineText(_ nodes: [ADFNode]) -> AttributedString {
@@ -197,7 +265,11 @@ struct ADFContentView: View {
             result += AttributedString("\n")
         case "inlineCard":
             if let urlString = node.attrs?.url, let url = URL(string: urlString) {
-                let label = JiraKeyParser.key(from: urlString) ?? url.host ?? urlString
+                // `directKey` statt `key`: letzteres sucht das Key-Muster
+                // irgendwo im String und trifft dann auch UUIDs in Fremd-URLs
+                // („…/f7aa484d-744d-4c0b-…" → „F7AA484D-744"). Jira zeigt hier
+                // den Seitentitel; den haben wir nicht, also der Host.
+                let label = JiraKeyParser.directKey(from: urlString) ?? url.host ?? urlString
                 var piece = AttributedString(label)
                 piece.link = url
                 piece.foregroundColor = .accentColor
@@ -350,5 +422,40 @@ struct FlowLayoutLite: Layout {
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
+    }
+}
+
+/// Link als klickbarer Chip. Bewusst ein `Link`-View und kein Link in einem
+/// `AttributedString`: letzterer verlangt einen bewegungsfreien Klick und ist
+/// von Hand kaum zu treffen (gemessen 1 von 10 gegen 10 von 10).
+/// Der Tooltip zeigt die vollständige URL — im Chip steht nur Key bzw. Host.
+private struct LinkChip: View {
+    let url: URL
+    let label: String
+
+    @State private var hovering = false
+
+    var body: some View {
+        Link(destination: url) {
+            HStack(spacing: 5) {
+                Image(systemName: "link").font(.caption2)
+                Text(label).font(.callout.weight(.medium))
+            }
+            .foregroundStyle(.tint)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Color.accentColor.opacity(hovering ? 0.18 : 0.1), in: Capsule())
+            // Großzügige, unsichtbare Trefferfläche. Nötig wegen einer
+            // Hit-Test-Anomalie in dieser Ansicht: gemessen reagiert nur das
+            // obere Drittel bis knapp die Hälfte des Frames (aktive Zone
+            // 715–724 pt bei einem Chip, der 713,5–736,3 pt einnimmt). Die
+            // Ursache ist nicht gefunden; da die Zone anteilig mitwächst,
+            // macht ein größerer Frame den Chip zuverlässig treffbar.
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(url.absoluteString)
     }
 }

@@ -9,6 +9,8 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+## [1.0.5] – 2026-07-28
+
 ### Verbessert
 
 - **Mehr Glas:** Der Fenster-Hintergrund nutzt jetzt das dünnste
@@ -132,7 +134,8 @@ Erstes Release: Menüleisten-App mit JIRA-Notifications als Messenger-artige
 Timeline, Antworten mit Markdown-Support (`code`, Code-Blöcke, **fett**,
 *kursiv*) und echten macOS-Push-Benachrichtigungen.
 
-[Unreleased]: https://github.com/entrecode/iJIRA/compare/1.0.4...HEAD
+[Unreleased]: https://github.com/entrecode/iJIRA/compare/1.0.5...HEAD
+[1.0.5]: https://github.com/entrecode/iJIRA/compare/1.0.4...1.0.5
 [1.0.4]: https://github.com/entrecode/iJIRA/compare/1.0.3...1.0.4
 [1.0.3]: https://github.com/entrecode/iJIRA/compare/1.0.2...1.0.3
 [1.0.2]: https://github.com/entrecode/iJIRA/compare/1.0.1...1.0.2

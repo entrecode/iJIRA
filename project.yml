@@ -11,7 +11,7 @@ settings:
     SWIFT_VERSION: "5.0"
     # Fallback für lokale Xcode-Builds — Releases überschreiben beides aus
     # Git (scripts/notarize.sh); Bump via scripts/release.sh.
-    MARKETING_VERSION: "1.0.5"
+    MARKETING_VERSION: "1.0.6"
     CURRENT_PROJECT_VERSION: "1"
     PRODUCT_BUNDLE_IDENTIFIER: de.entrecode.iJIRA
     # Manuelles Developer-ID-Signing für ALLE Builds → stabile Identität

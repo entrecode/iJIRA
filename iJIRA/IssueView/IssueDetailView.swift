@@ -102,13 +102,14 @@ struct IssueDetailContent: View {
     /// „als Einzelfenster öffnen".
     private func identityRow(detail: IssueDetailDTO) -> some View {
         HStack(spacing: 10) {
-            IssueKeyChip(key: model.issueKey)
+            IssueKeyChip(key: model.issueKey, webURL: model.webURL)
             if let status = detail.fields.status {
                 StatusTransitionMenu(model: model, status: status)
             }
             Spacer()
             TimeLogButton(model: model)
             if let url = model.webURL {
+                CopyLinkButton(key: model.issueKey, webURL: url)
                 // Bewusst KEIN Link: der openURL-Interceptor dieser View fängt
                 // Browse-URLs ab (und würde nur das Issue selbst „öffnen").
                 Button {
@@ -167,7 +168,7 @@ private struct IssueWindowHeader: View {
             // Platz für die Ampel-Buttons (transparente Titlebar).
             Spacer().frame(width: 66)
 
-            IssueKeyChip(key: model.issueKey)
+            IssueKeyChip(key: model.issueKey, webURL: model.webURL)
 
             if let status = model.detail?.fields.status {
                 StatusTransitionMenu(model: model, status: status)
@@ -189,6 +190,7 @@ private struct IssueWindowHeader: View {
             .help("Aktualisieren")
 
             if let url = model.webURL {
+                CopyLinkButton(key: model.issueKey, webURL: url)
                 Link(destination: url) {
                     Image(systemName: "safari")
                 }
@@ -209,17 +211,13 @@ private struct IssueWindowHeader: View {
 /// Issue-Key als kopierbarer Chip (Klick kopiert, kurzes Häkchen-Feedback).
 struct IssueKeyChip: View {
     let key: String
+    /// Web-Link des Issues — ergänzt „Link kopieren" im Kontextmenü.
+    var webURL: URL? = nil
     @State private var copied = false
 
     var body: some View {
         Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(key, forType: .string)
-            copied = true
-            Task {
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
-                copied = false
-            }
+            copyWithFeedback(key, into: $copied)
         } label: {
             HStack(spacing: 5) {
                 Text(key)
@@ -233,7 +231,56 @@ struct IssueKeyChip: View {
         }
         .buttonStyle(.plain)
         .glassChip()
-        .help("Key kopieren")
+        .help(webURL == nil ? "Key kopieren" : "Key kopieren — Rechtsklick für den Link")
+        .contextMenu {
+            CopyMenuItems(key: key, webURL: webURL, copied: $copied)
+        }
+    }
+}
+
+/// Kopiert den Web-Link des Issues. Dasselbe wie „Link kopieren" (⌘⇧C) im
+/// Menü — hier als sichtbarer Knopf neben dem „im Web öffnen"-Button.
+struct CopyLinkButton: View {
+    let key: String
+    let webURL: URL
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            copyWithFeedback(webURL.absoluteString, into: $copied)
+        } label: {
+            // Nur im Erfolgsfall eingefärbt, sonst bleibt der Knopf im
+            // Standard-Look seiner Nachbarn (Refresh, Safari).
+            if copied {
+                Image(systemName: "checkmark").foregroundStyle(.green)
+            } else {
+                Image(systemName: "link")
+            }
+        }
+        .buttonStyle(.borderless)
+        .help("Link kopieren (⌘⇧C)")
+        .contextMenu {
+            CopyMenuItems(key: key, webURL: webURL, copied: $copied)
+        }
+    }
+}
+
+/// Kontextmenü-Inhalt, an Key-Chip und Link-Button absichtlich identisch —
+/// egal welchen der beiden man erwischt, beide Formen sind erreichbar.
+private struct CopyMenuItems: View {
+    let key: String
+    let webURL: URL?
+    @Binding var copied: Bool
+
+    var body: some View {
+        Button("Key kopieren") {
+            copyWithFeedback(key, into: $copied)
+        }
+        if let webURL {
+            Button("Link kopieren") {
+                copyWithFeedback(webURL.absoluteString, into: $copied)
+            }
+        }
     }
 }
 

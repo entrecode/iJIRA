@@ -9,6 +9,15 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Link zum Issue kopieren:** Neuer Link-Knopf im Kopfbereich der
+  Detail-Ansicht (Einzelfenster wie Hauptfenster-Tab) legt die Browse-URL in
+  die Zwischenablage — kurzes Häkchen als Bestätigung. Dazu **⌘⇧C** und der
+  Eintrag „Link zum Issue kopieren" im Bearbeiten-Menü, die aufs vorderste
+  Issue wirken. Rechtsklick auf Key-Chip oder Link-Knopf bietet beides an
+  (Key bzw. Link), damit man nicht den richtigen Knopf treffen muss.
+
 ### Behoben
 
 - **Lange Beschreibungen und Kommentare wurden abgeschnitten:** Enthielt ein

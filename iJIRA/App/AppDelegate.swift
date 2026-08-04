@@ -3,7 +3,7 @@ import UserNotifications
 
 @main
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let appState = AppState()
     private let store = NotificationStore()
     private lazy var pushPresenter = PushPresenter(store: store)
@@ -146,6 +146,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func refreshCurrentTab(_ sender: Any?) {
         MainWindowController.shared.refreshCurrentTab()
+    }
+
+    /// ⌘⇧C: Web-Link des vordersten Issues in die Zwischenablage.
+    @objc func copyIssueLink(_ sender: Any?) {
+        guard let key = frontmostIssueKey() else { return }
+        let url = appState.issueWebURL(key)
+        guard !url.isEmpty else { return }
+        NSPasteboard.copy(url)
+        Log.app.info("Link kopiert: \(key, privacy: .public)")
+    }
+
+    /// Das Issue, auf das sich Menü-Actions beziehen: entweder ein
+    /// Issue-Einzelfenster oder der Issue-Tab des Hauptfensters.
+    private func frontmostIssueKey() -> String? {
+        guard let window = NSApp.keyWindow else { return nil }
+        return IssueWindowManager.shared.issueKey(for: window)
+            ?? MainWindowController.shared.issueKey(for: window)
+    }
+
+    /// Nur „Link kopieren" ist kontextabhängig — die übrigen Menü-Actions des
+    /// Delegates stehen immer zur Verfügung.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(copyIssueLink(_:)) else { return true }
+        return frontmostIssueKey() != nil
     }
 
     /// Deep-Links: ijira://issue/ONE-1234 öffnet das Issue-Fenster.

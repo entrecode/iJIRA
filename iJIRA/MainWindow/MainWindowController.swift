@@ -59,6 +59,14 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         model.showCreateSheet = true
     }
 
+    /// Issue-Key des aktiven Tabs — nil, wenn `candidate` nicht das
+    /// Hauptfenster ist oder gerade kein Issue-Tab offen liegt. Für
+    /// Menü-Actions aufs vorderste Issue (⌘⇧C).
+    func issueKey(for candidate: NSWindow) -> String? {
+        guard candidate === window, model.tab == .issue else { return nil }
+        return model.currentIssueKey
+    }
+
     /// ⌘R / Toolbar: aktualisiert den Inhalt des aktiven Tabs.
     func refreshCurrentTab() {
         switch model.tab {

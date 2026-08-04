@@ -60,6 +60,15 @@ enum MainMenu {
         editMenu.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Einsetzen", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Alles auswählen", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(.separator())
+        // Wirkt aufs vorderste Issue (Einzelfenster oder Issue-Tab); der
+        // AppDelegate graut den Eintrag sonst über validateMenuItem aus.
+        let copyLink = NSMenuItem(title: "Link zum Issue kopieren",
+                                  action: #selector(AppDelegate.copyIssueLink(_:)),
+                                  keyEquivalent: "c")
+        copyLink.keyEquivalentModifierMask = [.command, .shift]
+        copyLink.target = target
+        editMenu.addItem(copyLink)
         editItem.submenu = editMenu
 
         // MARK: Ansicht

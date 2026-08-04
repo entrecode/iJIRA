@@ -22,6 +22,12 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
         super.init()
     }
 
+    /// Issue-Key des Fensters — nil, wenn es keins der Einzelfenster ist.
+    /// Für Menü-Actions, die aufs vorderste Issue wirken (⌘⇧C).
+    func issueKey(for window: NSWindow) -> String? {
+        windows.first { $0.value === window }?.key
+    }
+
     /// Personen-Verzeichnis vorladen (nach dem Connect aufgerufen).
     func preloadDirectory() {
         guard let client = appState.currentClient() else { return }

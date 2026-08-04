@@ -9,6 +9,16 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Lange Beschreibungen und Kommentare wurden abgeschnitten:** Enthielt ein
+  Text ein Zitat, kürzte iJIRA alle anderen Absätze auf eine Zeile mit „…" —
+  am deutlichsten bei Listen. Ursache war der Zitat-Balken: als Shape ohne
+  Höhenbegrenzung beanspruchte er beliebig viel Platz, sodass der übrige Text
+  gequetscht wurde. Er liegt jetzt als Overlay hinter dem Zitat und nimmt nur
+  dessen Höhe ein — nebenbei verschwindet damit auch die große Leerfläche, die
+  unter Zitaten stand.
+
 ## [1.0.5] – 2026-07-28
 
 ### Verbessert

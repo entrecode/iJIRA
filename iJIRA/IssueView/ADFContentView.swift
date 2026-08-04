@@ -59,15 +59,26 @@ struct ADFContentView: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary, lineWidth: 1))
             )
 
+        // Der Zitat-Balken liegt als `overlay` hinter dem Text, nicht als
+        // HStack-Geschwister daneben. Grund: `RoundedRectangle` ist eine Shape
+        // und damit in der Höhe unbegrenzt gierig — `.frame(width: 3)` deckelt
+        // nur die Breite. Als Geschwister im Block-`VStack` trieb er dessen
+        // Höhenbedarf ins Unendliche; der VStack musste die verfügbare Höhe
+        // dann verteilen und quetschte die anderen Blöcke. Ein gequetschter
+        // `Text` wrappt nicht, sondern kürzt auf eine Zeile mit „…" — sichtbar
+        // vor allem an Listen (viel Text pro Block). Im `overlay` bekommt der
+        // Balken die Höhe des Inhalts und beeinflusst das Layout gar nicht.
         case "blockquote":
             return AnyView(
-                HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    blockViews(node.content ?? [])
+                }
+                // 3 pt Balken + 8 pt Abstand — entspricht dem früheren HStack.
+                .padding(.leading, 11)
+                .overlay(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Color.accentColor.opacity(0.5))
                         .frame(width: 3)
-                    VStack(alignment: .leading, spacing: 6) {
-                        blockViews(node.content ?? [])
-                    }
                 }
             )
 

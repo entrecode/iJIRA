@@ -240,6 +240,15 @@ struct JiraClient: Sendable {
         return result
     }
 
+    /// Untergeordnete Vorgänge: bei einem Epic die enthaltenen Issues, bei
+    /// einer Story die Sub-Tasks. Beide hängen am `parent`-Feld — gegen die
+    /// Instanz geprüft, auch für die klassischen Epic-Kinder im
+    /// company-managed Projekt —, deshalb genügt eine Abfrage für beide Fälle.
+    func childIssues(parentKey: String) async throws -> [BoardIssueDTO] {
+        try await searchAllPages(jql: "parent = \"\(parentKey)\" ORDER BY rank",
+                                 fields: ["summary", "status", "issuetype", "parent"])
+    }
+
     /// Worklogs eines Issues ab einem Zeitpunkt — Nachschlag für Issues mit
     /// mehr als 20 Einträgen (mehr liefert die Suche nicht inline).
     func worklogs(issueKey: String, startedAfter: Date) async throws -> [WorklogEntryDTO] {

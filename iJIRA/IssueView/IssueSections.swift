@@ -1028,6 +1028,60 @@ struct IssueAttachmentsSection: View {
     }
 }
 
+// MARK: - Untergeordnete Vorgänge (Epic-Kinder, Sub-Tasks)
+
+/// Was unter diesem Issue hängt: bei einem Epic die enthaltenen Vorgänge, bei
+/// einer Story die Sub-Tasks. Beides kommt aus derselben Abfrage
+/// (`JiraClient.childIssues`). Die Sektion erscheint nur, wenn es Kinder gibt.
+struct IssueChildrenSection: View {
+    @Bindable var model: IssueDetailModel
+
+    var body: some View {
+        SectionCard(title: "Untergeordnete Vorgänge (\(model.children.count))",
+                    systemImage: "list.bullet.indent") {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(model.children) { child in
+                    ChildRow(issue: child)
+                }
+            }
+        }
+    }
+}
+
+private struct ChildRow: View {
+    let issue: BoardIssueDTO
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            IssueWindowManager.shared.open(issueKey: issue.key)
+        } label: {
+            HStack(spacing: 8) {
+                IssueTypeIcon(typeName: issue.fields.issuetype?.name)
+                Text(issue.key)
+                    .font(.system(.callout, design: .monospaced).weight(.medium))
+                    .foregroundStyle(.tint)
+                Text(issue.fields.summary)
+                    .font(.callout)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                // Der Board-DTO trägt den Status mit optionalem Namen; das
+                // Badge will einen sicheren — deshalb hier umgesetzt.
+                if let status = issue.fields.status, let name = status.name {
+                    StatusBadge(status: StatusDTO(name: name,
+                                                  statusCategory: status.statusCategory))
+                }
+            }
+            .contentShape(Rectangle())
+            .background(hovering ? Color.primary.opacity(0.04) : .clear)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("\(issue.key) öffnen")
+    }
+}
+
 // MARK: - Verlinkte Vorgänge (editierbar)
 
 struct IssueLinksSection: View {

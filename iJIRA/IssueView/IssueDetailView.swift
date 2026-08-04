@@ -73,6 +73,9 @@ struct IssueDetailContent: View {
                     if !model.attachments.isEmpty {
                         IssueAttachmentsSection(model: model)
                     }
+                    if !model.children.isEmpty {
+                        IssueChildrenSection(model: model)
+                    }
                     IssueLinksSection(model: model, detail: detail)
                     IssueCommentsSection(model: model)
                 }

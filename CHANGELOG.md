@@ -11,6 +11,11 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ### Hinzugefügt
 
+- **Untergeordnete Vorgänge in der Detail-Ansicht:** Über den verlinkten
+  Vorgängen steht jetzt, was unter dem Issue hängt — bei einem Epic die
+  enthaltenen Vorgänge, bei einer Story die Sub-Tasks. Je Zeile Typ-Symbol,
+  Key, Titel und Status; Klick öffnet das Issue. Die Karte erscheint nur, wenn
+  es Kinder gibt.
 - **Link zum Issue kopieren:** Neuer Link-Knopf im Kopfbereich der
   Detail-Ansicht (Einzelfenster wie Hauptfenster-Tab) legt die Browse-URL in
   die Zwischenablage — kurzes Häkchen als Bestätigung. Dazu **⌘⇧C** und der

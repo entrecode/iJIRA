@@ -14,6 +14,8 @@ final class IssueDetailModel {
 
     private(set) var detail: IssueDetailDTO?
     private(set) var comments: [CommentDTO] = []
+    /// Untergeordnete Vorgänge (Epic-Kinder bzw. Sub-Tasks) — leer, wenn keine.
+    private(set) var children: [BoardIssueDTO] = []
     private(set) var isLoading = false
     private(set) var loadError: String?
 
@@ -88,10 +90,14 @@ final class IssueDetailModel {
         do {
             async let detailTask = client.issueDetail(key: issueKey)
             async let commentsTask = client.allComments(issueKey: issueKey)
+            // Kinder sind ein Nice-to-have: ein Fehler hier darf das Issue
+            // nicht am Laden hindern.
+            async let childrenTask = client.childIssues(parentKey: issueKey)
             detail = try await detailTask
             comments = try await commentsTask
+            children = (try? await childrenTask) ?? []
             loadError = nil
-            Log.app.info("Issue \(self.issueKey, privacy: .public) geladen: \(self.comments.count) Kommentare, \(self.attachments.count) Anhänge, \(self.detail?.fields.issuelinks?.count ?? 0) Links")
+            Log.app.info("Issue \(self.issueKey, privacy: .public) geladen: \(self.comments.count) Kommentare, \(self.attachments.count) Anhänge, \(self.detail?.fields.issuelinks?.count ?? 0) Links, \(self.children.count) untergeordnet")
             // Harvest-Summe parallel nachziehen (non-blocking, Nice-to-have).
             Task { await self.refreshLoggedTime() }
             // Team + Sprint (dynamische Custom Fields) via Raw-Fetch nachziehen;
@@ -120,6 +126,7 @@ final class IssueDetailModel {
         do {
             detail = try await client.issueDetail(key: issueKey)
             comments = (try? await client.allComments(issueKey: issueKey)) ?? comments
+            children = (try? await client.childIssues(parentKey: issueKey)) ?? children
             availableTransitions = (try? await client.transitions(issueKey: issueKey))
                 ?? availableTransitions
         } catch {

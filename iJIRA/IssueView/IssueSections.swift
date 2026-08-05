@@ -414,6 +414,28 @@ struct UserLabel: View {
     }
 }
 
+// MARK: - Fokus nach Popover-Präsentation
+
+extension View {
+    /// Fokussiert das Feld erst, wenn die Popover-Präsentation abgeschlossen
+    /// ist (`NSPopover.didShowNotification`) — nicht per `onAppear` +
+    /// `DispatchQueue.main.async`: Das ist ein Race. Läuft der Fokus-Block
+    /// zwischen Content-Aufbau und `showRelativeToRect`, hängt das Textsystem
+    /// seine out-of-process gehostete Kandidatenlisten-View (NSRemoteView) ins
+    /// noch unsichtbare Fenster, und deren Exception beim Window-Ordering macht
+    /// AppKit fatal (+[NSApplication _crashOnException:], Crash vom 05.08.2026).
+    /// Das Notification-Objekt wird bewusst nicht gefiltert: Der Empfänger lebt
+    /// nur, solange der Popover-Content existiert, und pro Interaktion ist nur
+    /// ein Popover offen.
+    func focusOnPopoverDidShow(_ focused: FocusState<Bool>.Binding) -> some View {
+        onReceive(NotificationCenter.default.publisher(for: NSPopover.didShowNotification)) { _ in
+            // Nicht synchron setzen: ohne Einblend-Animation trifft die
+            // Notification noch im Präsentations-Pass ein.
+            DispatchQueue.main.async { focused.wrappedValue = true }
+        }
+    }
+}
+
 // MARK: - Auswahl-Popover (wiederverwendbar)
 
 /// Einfach-/Mehrfachauswahl im Popover — dieselbe Optik für alle Detail-
@@ -562,10 +584,8 @@ struct LabelsEditorView: View {
         }
         .padding(12)
         .frame(width: 300)
-        .task {
-            DispatchQueue.main.async { focused = true }
-            await model.loadAllLabels()
-        }
+        .focusOnPopoverDidShow($focused)
+        .task { await model.loadAllLabels() }
     }
 
     private func add(_ raw: String) {
@@ -674,10 +694,8 @@ struct FixVersionsEditorView: View {
         }
         .padding(12)
         .frame(width: 300)
-        .task {
-            DispatchQueue.main.async { focused = true }
-            await model.loadProjectVersions()
-        }
+        .focusOnPopoverDidShow($focused)
+        .task { await model.loadProjectVersions() }
     }
 
     private func add(_ version: VersionDTO) {
@@ -752,12 +770,7 @@ struct PersonPickerView: View {
             }
         }
         .frame(width: 260, height: 320)
-        .onAppear {
-            // Fokus erst nach dem Einblenden des Popovers setzen — synchrones
-            // Fokussieren während des Window-Orderings crasht AppKit (NSRemoteView
-            // der Eingabe-/Kandidatenliste ordert mitten im Zyklus on-screen).
-            DispatchQueue.main.async { focused = true }
-        }
+        .focusOnPopoverDidShow($focused)
     }
 
     private func row(icon: String, text: String, action: @escaping () -> Void) -> some View {
@@ -841,12 +854,7 @@ struct IssueSuggestionPicker: View {
             }
         }
         .frame(width: 320, height: 300)
-        .onAppear {
-            // Fokus erst nach dem Einblenden des Popovers setzen — synchrones
-            // Fokussieren während des Window-Orderings crasht AppKit (NSRemoteView
-            // der Eingabe-/Kandidatenliste ordert mitten im Zyklus on-screen).
-            DispatchQueue.main.async { focused = true }
-        }
+        .focusOnPopoverDidShow($focused)
         .onChange(of: query) { _, newValue in
             searchTask?.cancel()
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)

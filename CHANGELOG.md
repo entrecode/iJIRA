@@ -9,6 +9,16 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Sporadischer Absturz beim Öffnen der Auswahl-Popover:** Ein Klick auf
+  Assignee, Parent, Labels oder Fix-Versions konnte die App beenden. Das
+  Suchfeld wurde fokussiert, während macOS das Popover-Fenster noch
+  einblendete — die dabei eingehängte Eingabe-Systemview (out-of-process)
+  brachte AppKit zum Absturz, gehäuft auf der macOS-27-Beta. Der Fokus wird
+  jetzt erst gesetzt, wenn das Popover fertig präsentiert ist
+  (`NSPopover.didShowNotification` statt Run-Loop-Raten).
+
 ## [1.0.6] – 2026-08-04
 
 ### Hinzugefügt

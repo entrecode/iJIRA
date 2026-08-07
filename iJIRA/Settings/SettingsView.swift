@@ -242,10 +242,15 @@ struct GeneralSettingsView: View {
             }
 
             Toggle("Beim Start das Board-Fenster öffnen", isOn: $showWindowOnLaunch)
-            Text("Aus = die App startet still in der Menüleiste (z. B. für den Autostart). Das Fenster öffnet sich jederzeit über das Dock, die Menüleiste oder erneutes Öffnen der App.")
+            Text("Aus = die App startet ohne Fenster (z. B. für den Autostart) und synchronisiert still weiter. Das Fenster öffnet sich jederzeit über das Dock-Icon, die Menüleiste oder erneutes Öffnen der App.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if UpdaterController.shared.isAvailable {
+                Divider().padding(.vertical, 4)
+                UpdateSettingsSection()
+            }
 
             Spacer(minLength: 0)
         }
@@ -269,6 +274,42 @@ struct GeneralSettingsView: View {
         } catch {
             launchAtLoginError = "Login-Item konnte nicht geändert werden: \(error.localizedDescription)"
             launchAtLogin = service.status == .enabled
+        }
+    }
+}
+
+// MARK: - Updates
+
+/// Update-Einstellungen. Die Werte gehören Sparkle (es persistiert sie selbst
+/// in den UserDefaults); die `@State`-Spiegel werden beim Erscheinen gelesen
+/// und bei jeder Änderung zurückgeschrieben. Bewusst nicht im
+/// Property-Initializer gelesen — der läuft außerhalb der Main-Actor-Isolation
+/// der View.
+struct UpdateSettingsSection: View {
+    @State private var automaticChecks = false
+    @State private var automaticDownloads = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle("Automatisch nach Updates suchen", isOn: $automaticChecks)
+                .onChange(of: automaticChecks) { _, on in
+                    UpdaterController.shared.automaticallyChecksForUpdates = on
+                }
+
+            Toggle("Updates automatisch laden und installieren", isOn: $automaticDownloads)
+                .onChange(of: automaticDownloads) { _, on in
+                    UpdaterController.shared.automaticallyDownloadsUpdates = on
+                }
+                .disabled(!automaticChecks)
+
+            Button("Jetzt nach Updates suchen …") {
+                UpdaterController.shared.checkForUpdates(nil)
+            }
+            .disabled(!UpdaterController.shared.canCheckForUpdates)
+        }
+        .onAppear {
+            automaticChecks = UpdaterController.shared.automaticallyChecksForUpdates
+            automaticDownloads = UpdaterController.shared.automaticallyDownloadsUpdates
         }
     }
 }

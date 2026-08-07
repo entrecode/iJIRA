@@ -4,9 +4,11 @@ Native macOS-App, die die wichtigsten JIRA-Funktionen messenger-artig auf den Ma
 
 ## Download
 
-**[Neueste Version herunterladen](../../releases/latest)** — notarisierte `.app`, läuft ohne Gatekeeper-Warnung.
+**[Neueste Version herunterladen](../../releases/latest)** — notarisiertes `.dmg`, läuft ohne Gatekeeper-Warnung.
 
-Entpacken, in `/Applications` verschieben, starten. Änderungen pro Version: [CHANGELOG.md](CHANGELOG.md).
+Image öffnen, iJIRA auf den `Programme`-Ordner ziehen, starten. Änderungen pro Version: [CHANGELOG.md](CHANGELOG.md).
+
+Ab Version 1.1.0 hält sich die App selbst aktuell (Sparkle): Sie sucht im Hintergrund nach Updates und bietet sie zur Installation an. Abschaltbar unter **Einstellungen → Allgemein**, manuell anstoßen über **iJIRA → Nach Updates suchen …**. Das mit veröffentlichte `.zip` ist das Update-Paket für Sparkle — zum Installieren von Hand ist das `.dmg` gedacht.
 
 ## Features
 
@@ -24,7 +26,17 @@ Dieses Projekt verwendet [XcodeGen](https://github.com/yonaskolb/XcodeGen), um d
 
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - Xcode (macOS 14.0+)
-- Für Releases zusätzlich: „Developer ID Application“-Zertifikat, Notar-Profil `ijira-notary` (Details im Kopf von `scripts/notarize.sh`) und die [GitHub CLI](https://cli.github.com) (`brew install gh`)
+- Für Releases zusätzlich: „Developer ID Application“-Zertifikat, Notar-Profil `ijira-notary` (Details im Kopf von `scripts/notarize.sh`), die [GitHub CLI](https://cli.github.com) (`brew install gh`) und `create-dmg` (`brew install create-dmg`, optional — ohne das Tool entsteht ein Image ohne gesetztes Fenster-Layout)
+
+### Einmalig: Sparkle-Signaturschlüssel
+
+Vor dem ersten Release muss der Update-Signaturschlüssel existieren:
+
+```bash
+scripts/sparkle-setup.sh
+```
+
+Das erzeugt ein EdDSA-Paar, legt den privaten Schlüssel in der Keychain ab und trägt den öffentlichen als `SUPublicEDKey` in die `project.yml` ein. **Der private Schlüssel muss gesichert werden** — geht er verloren, akzeptiert keine bereits installierte iJIRA je wieder ein Update, und alle Nutzer müssten manuell neu installieren. `notarize.sh` verweigert einen signierten Build, solange der Schlüssel fehlt.
 
 ### Lokal bauen und starten
 
@@ -50,18 +62,33 @@ scripts/release.sh 1.0.3
 
 # 2. Veröffentlichen (Befehle gibt release.sh am Ende auch selbst aus):
 git push && git push origin 1.0.3
-gh release create 1.0.3 .build-release/iJIRA.zip \
+gh release create 1.0.3 \
+  .build-release/iJIRA-1.0.3.dmg \
+  .build-release/iJIRA-1.0.3.zip \
   --title "iJIRA 1.0.3" --notes-file .build-release/RELEASE_NOTES.md
+
+# 3. Erst JETZT den appcast pushen — vorher zeigt er auf Dateien,
+#    die es noch nicht gibt:
+git add appcast.xml && git commit -m "release: appcast 1.0.3" && git push
 ```
 
-Alternativ zum `gh`-Befehl lässt sich das Release auf der GitHub-Seite anlegen: [Releases → „Draft a new release“](../../releases/new), den frisch gepushten Tag wählen, Notes aus `.build-release/RELEASE_NOTES.md` (bzw. dem neuen CHANGELOG-Abschnitt) einfügen und `.build-release/iJIRA.zip` als Asset hochladen.
+Alternativ zum `gh`-Befehl lässt sich das Release auf der GitHub-Seite anlegen: [Releases → „Draft a new release“](../../releases/new), den frisch gepushten Tag wählen, Notes aus `.build-release/RELEASE_NOTES.md` (bzw. dem neuen CHANGELOG-Abschnitt) einfügen und beide Assets hochladen.
+
+### Wie das Auto-Update funktioniert
+
+Es gibt keinen Updateserver. Die App liest `appcast.xml` von `raw.githubusercontent.com` aus diesem Repo; darin steht die neueste Version samt Link auf das `.zip`-Asset des zugehörigen GitHub-Releases und einer EdDSA-Signatur, die die App gegen ihren eingebauten Public Key prüft. Der Feed enthält bewusst nur den jeweils neuesten Eintrag — Sparkle braucht für den Sprung auf die aktuelle Version nicht mehr.
+
+**Damit das Repo öffentlich lesbar sein muss:** ein privates Repo liefert weder `raw.githubusercontent.com`-Inhalte noch Release-Assets ohne Token aus, und ein in der App eingebetteter Token wäre praktisch öffentlich.
 
 ### Wann welches Script?
 
 | Script | Zweck | Wann |
 | --- | --- | --- |
-| `scripts/release.sh <version>` | Kompletter Release: Changelog finalisieren, Version bumpen, Commit + Tag, dann Build via notarize.sh | Immer, wenn eine neue Version erscheint |
-| `scripts/notarize.sh` | Nur bauen, signieren, notarisieren — Version/Build kommen aus dem bestehenden Git-Stand (neuester Tag + Commit-Count) | Rebuild eines bereits getaggten Stands oder Test des Release-Builds, ohne eine neue Version zu erzeugen |
+| `scripts/release.sh <version>` | Kompletter Release: Changelog finalisieren, Version bumpen, Commit + Tag, Build via notarize.sh, dann appcast | Immer, wenn eine neue Version erscheint |
+| `scripts/notarize.sh` | Nur bauen, signieren, notarisieren — erzeugt `.zip` **und** `.dmg`; Version/Build kommen aus dem bestehenden Git-Stand (neuester Tag + Commit-Count) | Rebuild eines bereits getaggten Stands oder Test des Release-Builds, ohne eine neue Version zu erzeugen |
+| `scripts/make-dmg.sh <app> <dmg>` | Baut nur das Image (App + `Programme`-Alias) | Wird von notarize.sh aufgerufen; einzeln zum Prüfen des Layouts |
+| `scripts/make-appcast.sh <version> [notes.md]` | Erzeugt und signiert `appcast.xml` aus dem Release-Zip | Wird von release.sh aufgerufen; einzeln, wenn der Feed neu geschrieben werden muss |
+| `scripts/sparkle-setup.sh` | Erzeugt den Update-Signaturschlüssel und trägt den Public Key ein | Einmalig pro Maschine/Projekt |
 
 `notarize.sh` erzeugt also nie eine neue Version — es baut, was Git hergibt. Direkt von einem ungetaggten Stand gebaut, trägt die App die Version des letzten Tags mit höherer Build-Nummer.
 

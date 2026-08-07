@@ -1,0 +1,59 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>iJIRA</title>
+        <item>
+            <title>1.1.0</title>
+            <pubDate>Fri, 07 Aug 2026 16:58:02 +0200</pubDate>
+            <link>https://github.com/entrecode/iJIRA</link>
+            <sparkle:version>55</sparkle:version>
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[
+### Hinzugefügt
+
+- **Automatische Updates:** iJIRA sucht im Hintergrund nach neuen Versionen und
+  bietet sie zur Installation an — kein manuelles Herunterladen mehr. Manuell
+  anstoßen über **iJIRA → Nach Updates suchen …**, abschalten unter
+  **Einstellungen → Allgemein**. Umgesetzt mit Sparkle; die Update-Infos liegen
+  als signierte Datei im Repo, es gibt keinen eigenen Updateserver. Jedes
+  Update wird vor der Installation gegen den in der App hinterlegten
+  Schlüssel geprüft.
+
+- **Genaue Zeit per Mouse-over:** Alle relativen Zeitangaben („vor 3 Std.") —
+  an Kommentaren, Board-Karten, in der Timeline und bei „zuletzt
+  aktualisiert" — zeigen beim Überfahren das genaue Datum samt Uhrzeit.
+- **Link zu einzelnen Kommentaren:** Beim Überfahren eines Kommentars in der
+  Detail-Ansicht erscheint ein Link-Knopf, der den Jira-Deeplink auf genau
+  diesen Kommentar kopiert (Jira springt beim Öffnen direkt dorthin). In der
+  Timeline im Popover liegt derselbe Link jetzt neben „Im Web öffnen".
+
+### Verbessert
+
+- **iJIRA ist eine normale App:** Bisher lief sie als reiner
+  Menüleisten-Agent, der sich nur zeitweise ein Dock-Icon zulegte. Jetzt ist
+  sie durchgängig eine gewöhnliche App mit Dock-Icon und Menüleiste — das
+  Menüleisten-Symbol samt Timeline bleibt daneben erhalten. Wie gehabt läuft
+  sie nach dem Schließen des letzten Fensters weiter und synchronisiert
+  weiter.
+- **Installation als Disk-Image:** Releases erscheinen jetzt als `.dmg` mit
+  `Programme`-Alias zum Hineinziehen statt als Zip-Archiv. Damit landet die App
+  verlässlich in `/Applications` — aus einem Zip heraus wurde sie oft direkt im
+  Download-Ordner gestartet, was Login-Item und Update-Installation stört.
+
+### Behoben
+
+- **Sporadischer Absturz beim Öffnen der Auswahl-Popover:** Ein Klick auf
+  Assignee, Parent, Labels oder Fix-Versions konnte die App beenden. Das
+  Suchfeld wurde fokussiert, während macOS das Popover-Fenster noch
+  einblendete — die dabei eingehängte Eingabe-Systemview (out-of-process)
+  brachte AppKit zum Absturz, gehäuft auf der macOS-27-Beta. Der Fokus wird
+  jetzt erst gesetzt, wenn das Popover fertig präsentiert ist
+  (`NSPopover.didShowNotification` statt Run-Loop-Raten).
+
+]]></description>
+            <enclosure url="https://github.com/entrecode/iJIRA/releases/download/1.1.0/iJIRA-1.1.0.zip" length="3662368" type="application/octet-stream" sparkle:edSignature="IPm6hYKpHqeKvgLJYYp+gJ2jQIWMnCNUOsoF8ftNBskyVeqAVoFSMPBSiHWpy5/fRoVYghsPW2cY+wnuQB+0BQ=="/>
+        </item>
+    </channel>
+</rss>

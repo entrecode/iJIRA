@@ -80,6 +80,47 @@ else
 fi
 
 if [ "$HAS_CERT" = true ]; then
+    # Sparkle liefert Hilfsprogramme mit (Updater.app, Autoupdate, die
+    # XPC-Dienste). Im XCFramework sind die nur ad-hoc signiert, und Xcode
+    # signiert beim Einbetten ausschließlich das Framework selbst — die
+    # verschachtelten Binaries bleiben unberührt. `codesign --verify` stört das
+    # nicht, die Notarisierung lehnt aber jedes Binary ohne Developer ID und
+    # ohne Secure Timestamp ab ("The binary is not signed with a valid
+    # Developer ID certificate").
+    #
+    # Also von innen nach außen nachsignieren: erst die Helfer, dann das
+    # Framework, zuletzt die App, deren Signatur alles darunter versiegelt.
+    SPARKLE_VERSION="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
+    SPARKLE_PARTS=(
+        "$SPARKLE_VERSION/XPCServices/Downloader.xpc"
+        "$SPARKLE_VERSION/XPCServices/Installer.xpc"
+        "$SPARKLE_VERSION/Updater.app"
+        "$SPARKLE_VERSION/Autoupdate"
+        "$SPARKLE_VERSION"
+    )
+    if [ -d "$SPARKLE_VERSION" ]; then
+        echo "==> Sparkle-Bestandteile nachsignieren"
+        for item in "${SPARKLE_PARTS[@]}"; do
+            [ -e "$item" ] || continue
+            codesign --force --options runtime --timestamp \
+                --sign "Developer ID Application" "$item"
+        done
+        # Die App hat keine Entitlements (bewusst: keine Sandbox, nur Hardened
+        # Runtime) — deshalb genügt hier ein schlichtes Neusignieren.
+        codesign --force --options runtime --timestamp \
+            --sign "Developer ID Application" "$APP"
+
+        # Gegenprobe je Bestandteil: ein übersehener Ad-hoc-Rest würde erst
+        # nach Minuten beim Notardienst auffallen.
+        for item in "${SPARKLE_PARTS[@]}"; do
+            [ -e "$item" ] || continue
+            if codesign -dvv "$item" 2>&1 | grep -q "Signature=adhoc"; then
+                echo "❌ $item ist weiterhin ad-hoc signiert." >&2
+                exit 1
+            fi
+        done
+    fi
+
     echo "==> Signatur prüfen"
     codesign --verify --deep --strict --verbose=2 "$APP"
 

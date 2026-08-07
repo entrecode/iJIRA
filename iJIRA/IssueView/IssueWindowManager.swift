@@ -50,7 +50,6 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
     private func openSeparateWindow(key: String) {
         Log.app.info("Issue-Einzelfenster öffnen: \(key, privacy: .public)")
         if let window = windows[key] {
-            ActivationPolicy.windowBecameVisible()
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -75,7 +74,6 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
         window.delegate = self
         windows[key] = window
 
-        ActivationPolicy.windowBecameVisible()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -83,7 +81,6 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         windows = windows.filter { $0.value != window }
-        DispatchQueue.main.async { ActivationPolicy.windowClosed() }
     }
 }
 

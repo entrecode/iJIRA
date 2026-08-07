@@ -12,20 +12,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var menuBarController: MenuBarController?
 
     /// Manueller App-Bootstrap (statt @NSApplicationMain), damit die AppKit-Hülle
-    /// volle Kontrolle über Lifecycle und Aktivierungspolitik behält.
-    /// .accessory = Menüleisten-Agent ohne Dock-Icon (zusätzlich via LSUIElement).
+    /// volle Kontrolle über den Lifecycle behält.
+    ///
+    /// Reguläre App mit Dock-Icon und Menüleiste. Das Menüleisten-Icon bleibt
+    /// zusätzlich bestehen — es ist der schnelle Zugriff auf die Timeline, nicht
+    /// mehr die einzige Hülle. Da die App kein
+    /// `applicationShouldTerminateAfterLastWindowClosed` implementiert, läuft sie
+    /// nach dem Schließen des letzten Fensters weiter und synchronisiert weiter.
     static func main() {
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate
-        application.setActivationPolicy(.accessory)
+        application.setActivationPolicy(.regular)
         application.run()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Vollständige Menüleiste — sichtbar, sobald die App per
-        // ActivationPolicy regulär wird; die Edit-Shortcuts greifen auch im
-        // Agent-Modus über die Responder-Chain.
+        // Auto-Update starten, bevor das Menü gebaut wird: dort hängt der
+        // Eintrag „Nach Updates suchen …" nur ein, wenn Sparkle konfiguriert
+        // ist.
+        _ = UpdaterController.shared
+
+        // Vollständige Menüleiste.
         MainMenu.install(target: self)
 
         // Notification Center: Delegate, Actions, Berechtigung.

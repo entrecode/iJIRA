@@ -9,6 +9,37 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Automatische Updates:** iJIRA sucht im Hintergrund nach neuen Versionen und
+  bietet sie zur Installation an — kein manuelles Herunterladen mehr. Manuell
+  anstoßen über **iJIRA → Nach Updates suchen …**, abschalten unter
+  **Einstellungen → Allgemein**. Umgesetzt mit Sparkle; die Update-Infos liegen
+  als signierte Datei im Repo, es gibt keinen eigenen Updateserver. Jedes
+  Update wird vor der Installation gegen den in der App hinterlegten
+  Schlüssel geprüft.
+
+- **Genaue Zeit per Mouse-over:** Alle relativen Zeitangaben („vor 3 Std.") —
+  an Kommentaren, Board-Karten, in der Timeline und bei „zuletzt
+  aktualisiert" — zeigen beim Überfahren das genaue Datum samt Uhrzeit.
+- **Link zu einzelnen Kommentaren:** Beim Überfahren eines Kommentars in der
+  Detail-Ansicht erscheint ein Link-Knopf, der den Jira-Deeplink auf genau
+  diesen Kommentar kopiert (Jira springt beim Öffnen direkt dorthin). In der
+  Timeline im Popover liegt derselbe Link jetzt neben „Im Web öffnen".
+
+### Verbessert
+
+- **iJIRA ist eine normale App:** Bisher lief sie als reiner
+  Menüleisten-Agent, der sich nur zeitweise ein Dock-Icon zulegte. Jetzt ist
+  sie durchgängig eine gewöhnliche App mit Dock-Icon und Menüleiste — das
+  Menüleisten-Symbol samt Timeline bleibt daneben erhalten. Wie gehabt läuft
+  sie nach dem Schließen des letzten Fensters weiter und synchronisiert
+  weiter.
+- **Installation als Disk-Image:** Releases erscheinen jetzt als `.dmg` mit
+  `Programme`-Alias zum Hineinziehen statt als Zip-Archiv. Damit landet die App
+  verlässlich in `/Applications` — aus einem Zip heraus wurde sie oft direkt im
+  Download-Ordner gestartet, was Login-Item und Update-Installation stört.
+
 ### Behoben
 
 - **Sporadischer Absturz beim Öffnen der Auswahl-Popover:** Ein Klick auf

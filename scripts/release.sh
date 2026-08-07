@@ -93,7 +93,8 @@ git tag "$VERSION"
 echo "==> Build + Notarisierung"
 scripts/notarize.sh
 
-# Notes der neuen Version für das GitHub-Release extrahieren.
+# Notes der neuen Version — für das GitHub-Release wie für den appcast
+# (Sparkle zeigt sie im Update-Dialog).
 NOTES_FILE=".build-release/RELEASE_NOTES.md"
 awk -v ver="$VERSION" '
     $0 ~ "^## \\[" ver "\\]" {flag=1; next}
@@ -102,10 +103,18 @@ awk -v ver="$VERSION" '
     flag
 ' CHANGELOG.md > "$NOTES_FILE"
 
+scripts/make-appcast.sh "$VERSION" "$NOTES_FILE"
+
 echo
 echo "✅ Release $VERSION getaggt und gebaut."
 echo
-echo "Jetzt veröffentlichen:"
+echo "Jetzt veröffentlichen — Reihenfolge beachten: erst die Assets hochladen,"
+echo "dann den appcast pushen. Andersherum sehen die Clients ein Update,"
+echo "dessen Datei es noch nicht gibt."
+echo
 echo "  git push && git push origin $VERSION"
-echo "  gh release create $VERSION .build-release/iJIRA.zip \\"
+echo "  gh release create $VERSION \\"
+echo "    .build-release/iJIRA-$VERSION.dmg \\"
+echo "    .build-release/iJIRA-$VERSION.zip \\"
 echo "    --title \"iJIRA $VERSION\" --notes-file $NOTES_FILE"
+echo "  git add appcast.xml && git commit -m \"release: appcast $VERSION\" && git push"

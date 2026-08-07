@@ -6,6 +6,11 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
 
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.9.5"
+
 settings:
   base:
     SWIFT_VERSION: "5.0"
@@ -28,11 +33,11 @@ targets:
     platform: macOS
     sources:
       - path: iJIRA
+    dependencies:
+      - package: Sparkle
     info:
       path: iJIRA/Info.plist
       properties:
-        # Menüleisten-Agent: kein Dock-Icon, kein Hauptfenster beim Start
-        LSUIElement: true
         CFBundleDisplayName: iJIRA
         CFBundleName: iJIRA
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
@@ -48,6 +53,17 @@ targets:
         # Damit App Transport Security nur HTTPS erlaubt (Default ist ohnehin streng)
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
+        # Sparkle-Auto-Update. Der appcast ist eine statische Datei im
+        # öffentlichen Repo — kein eigener Updateserver. SUPublicEDKey trägt
+        # scripts/sparkle-setup.sh einmalig ein; der zugehörige PRIVATE
+        # Schlüssel liegt in der Keychain und muss gesichert werden (ohne ihn
+        # akzeptiert keine installierte App je wieder ein Update).
+        SUFeedURL: https://raw.githubusercontent.com/entrecode/iJIRA/main/appcast.xml
+        SUPublicEDKey: "937PkJCk5GCARK/FCzsDL8Qeemvojw4t8L644n9sIpA="
+        # Ohne diesen Schlüssel fragt Sparkle beim ersten Start nach; für ein
+        # internes Tool ist „an" die sinnvollere Vorgabe (abschaltbar in den
+        # Einstellungen).
+        SUEnableAutomaticChecks: true
     settings:
       base:
         PRODUCT_NAME: iJIRA

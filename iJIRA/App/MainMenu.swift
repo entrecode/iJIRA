@@ -1,7 +1,6 @@
 import AppKit
 
-/// Baut die vollständige macOS-Hauptmenüleiste. Sichtbar, sobald die App
-/// via `ActivationPolicy` zur regulären App wird (Hauptfenster offen).
+/// Baut die vollständige macOS-Hauptmenüleiste.
 @MainActor
 enum MainMenu {
     static func install(target: AppDelegate) {
@@ -14,6 +13,15 @@ enum MainMenu {
         appMenu.addItem(withTitle: "Über iJIRA",
                         action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
                         keyEquivalent: "")
+        // Nur zeigen, wenn Sparkle konfiguriert ist — ein Eintrag, der nichts
+        // tun kann, ist schlechter als keiner.
+        if UpdaterController.shared.isAvailable {
+            let updates = NSMenuItem(title: "Nach Updates suchen …",
+                                     action: #selector(UpdaterController.checkForUpdates(_:)),
+                                     keyEquivalent: "")
+            updates.target = UpdaterController.shared
+            appMenu.addItem(updates)
+        }
         appMenu.addItem(.separator())
         let settings = NSMenuItem(title: "Einstellungen …",
                                   action: #selector(AppDelegate.openSettings(_:)),

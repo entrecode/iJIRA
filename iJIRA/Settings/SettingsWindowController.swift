@@ -21,7 +21,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func show() {
         if window == nil { window = makeWindow() }
-        ActivationPolicy.windowBecameVisible()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -36,9 +35,5 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.center()
         window.delegate = self
         return window
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        DispatchQueue.main.async { ActivationPolicy.windowClosed() }
     }
 }

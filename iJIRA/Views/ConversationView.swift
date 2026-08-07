@@ -300,6 +300,8 @@ enum CommentDrafts {
 private struct MessageBubble: View {
     let notification: JiraNotification
 
+    @State private var copiedLink = false
+
     var body: some View {
         switch notification.kind {
         case .statusChange, .assignment, .fieldChange:
@@ -347,9 +349,22 @@ private struct MessageBubble: View {
                     .background(RoundedRectangle(cornerRadius: 12)
                         .fill(notification.isOwn ? AnyShapeStyle(Color.accentColor.opacity(0.18))
                                                  : AnyShapeStyle(.quaternary.opacity(0.35))))
-                Button("Im Web öffnen") { open() }
-                    .buttonStyle(.link)
-                    .font(.caption2)
+                // `webURLString` trägt bei Kommentaren bereits den
+                // focusedCommentId — der Link zeigt also auf genau diesen
+                // Beitrag, nicht nur auf das Issue.
+                HStack(spacing: 8) {
+                    Button("Im Web öffnen") { open() }
+                        .buttonStyle(.link)
+                    Button {
+                        copyWithFeedback(notification.webURLString, into: $copiedLink)
+                    } label: {
+                        Image(systemName: copiedLink ? "checkmark" : "link")
+                            .foregroundStyle(copiedLink ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Link kopieren")
+                }
+                .font(.caption2)
             }
             if notification.isOwn {
                 AvatarView(url: notification.avatarURL, kind: notification.kind, size: 26)

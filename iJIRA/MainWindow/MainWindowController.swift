@@ -29,7 +29,6 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     func show() {
         onWillShow?()
         if window == nil { window = makeWindow() }
-        ActivationPolicy.windowBecameVisible()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -99,10 +98,5 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.setFrameAutosaveName("MainWindow")
         window.delegate = self
         return window
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        // Verzögert prüfen — beim Delegate-Aufruf ist das Fenster noch sichtbar.
-        DispatchQueue.main.async { ActivationPolicy.windowClosed() }
     }
 }

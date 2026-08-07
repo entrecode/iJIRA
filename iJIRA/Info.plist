@@ -33,8 +33,6 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSUIElement</key>
-	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -42,5 +40,11 @@
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/entrecode/iJIRA/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>937PkJCk5GCARK/FCzsDL8Qeemvojw4t8L644n9sIpA=</string>
 </dict>
 </plist>

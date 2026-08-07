@@ -425,7 +425,7 @@ struct JiraClient: Sendable {
     ///
     ///     inwardKey = A, outwardKey = B   ⇒   „A blocks B" / „B is blocked by A"
     ///
-    /// Live gegen `dein-team.atlassian.net` verifiziert: Bei einer
+    /// Live gegen eine Jira-Cloud-Instanz verifiziert: Bei einer
     /// bestehenden Verknüpfung ONE-9803 → ONE-9804 liefert GET auf ONE-9803 den
     /// Partner unter `outwardIssue` (Anzeige „blocks"), GET auf ONE-9804 unter
     /// `inwardIssue` (Anzeige „is blocked by") — das Link-Objekt ist also

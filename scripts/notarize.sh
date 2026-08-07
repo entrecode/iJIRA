@@ -21,7 +21,6 @@ TEAM="MAMAYY5H8H"
 PROFILE="ijira-notary"
 BUILD_DIR=".build-release"
 APP="$BUILD_DIR/Build/Products/Release/$APP_NAME.app"
-ZIP="$BUILD_DIR/$APP_NAME.zip"
 
 echo "==> Projekt generieren"
 xcodegen generate
@@ -34,9 +33,22 @@ VERSION="$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/
 BUILD_NUMBER="$(git rev-list --count HEAD)"
 echo "==> Version $VERSION (Build $BUILD_NUMBER)"
 
+# Versionierte Namen: die Enclosure-URL im appcast zeigt auf genau diese
+# Dateinamen im GitHub-Release des passenden Tags.
+ZIP="$BUILD_DIR/$APP_NAME-$VERSION.zip"
+DMG="$BUILD_DIR/$APP_NAME-$VERSION.dmg"
+NOTARIZE_ZIP="$BUILD_DIR/$APP_NAME-notarize.zip"
+
 # Prüfen ob Developer ID-Zertifikat vorhanden ist
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "Developer ID Application"; then
     HAS_CERT=true
+    # Ein signiertes Release ohne Sparkle-Schlüssel wäre eine Sackgasse: die
+    # ausgelieferte App könnte nie ein Update prüfen, und ein späteres
+    # Nachrüsten erreicht die bereits installierten Kopien nicht mehr.
+    if ! grep -qE '^ *SUPublicEDKey: *"[^"]+"' project.yml; then
+        echo "❌ SUPublicEDKey fehlt in project.yml — erst scripts/sparkle-setup.sh laufen lassen." >&2
+        exit 1
+    fi
 else
     HAS_CERT=false
     echo "⚠️  Kein 'Developer ID Application'-Zertifikat gefunden."
@@ -71,38 +83,62 @@ if [ "$HAS_CERT" = true ]; then
     echo "==> Signatur prüfen"
     codesign --verify --deep --strict --verbose=2 "$APP"
 
-    echo "==> Zippen für Notar-Upload"
-    rm -f "$ZIP"
-    ditto -c -k --keepParent "$APP" "$ZIP"
+    # Kleine Helfer, damit App und DMG denselben Weg gehen.
+    notarize() {
+        local file="$1"
+        local result
+        result=$(xcrun notarytool submit "$file" --keychain-profile "$PROFILE" --wait | tee /dev/stderr)
+        if ! echo "$result" | grep -q "status: Accepted"; then
+            local id
+            id=$(echo "$result" | awk '/id:/ {print $2; exit}')
+            echo "❌ Notarisierung fehlgeschlagen für $file. Protokoll:" >&2
+            xcrun notarytool log "$id" --keychain-profile "$PROFILE" >&2 || true
+            exit 1
+        fi
+    }
 
-    echo "==> An Apple-Notardienst senden (wartet auf Ergebnis)"
-    RESULT=$(xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait | tee /dev/stderr)
-    if ! echo "$RESULT" | grep -q "status: Accepted"; then
-        SUBMISSION_ID=$(echo "$RESULT" | awk '/id:/ {print $2; exit}')
-        echo "❌ Notarisierung fehlgeschlagen. Protokoll:"
-        xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$PROFILE" || true
-        exit 1
-    fi
+    echo "==> App zippen für Notar-Upload"
+    rm -f "$NOTARIZE_ZIP"
+    ditto -c -k --keepParent "$APP" "$NOTARIZE_ZIP"
 
-    echo "==> Ticket anheften"
+    echo "==> App an Apple-Notardienst senden (wartet auf Ergebnis)"
+    notarize "$NOTARIZE_ZIP"
+    rm -f "$NOTARIZE_ZIP"
+
+    echo "==> Ticket an die App heften"
+    # Bewusst zusätzlich zum DMG-Stapling: so trägt die App das Ticket auch
+    # dann bei sich, wenn sie aus dem Image herauskopiert weitergereicht wird.
     xcrun stapler staple "$APP"
 
     echo "==> Gatekeeper-Bewertung"
     spctl -a -vvv --type execute "$APP" || true
 
-    # Zip mit gestapelter App erneuern — das ist die Datei zum Weitergeben
-    # (Ticket inklusive, funktioniert damit auch offline).
-    echo "==> Distributions-Zip erneuern"
+    # Zip aus der gestapelten App — das ist die Datei, die Sparkle lädt.
+    echo "==> Update-Zip erzeugen"
     rm -f "$ZIP"
     ditto -c -k --keepParent "$APP" "$ZIP"
 
+    echo "==> DMG bauen"
+    scripts/make-dmg.sh "$APP" "$DMG"
+
+    echo "==> DMG signieren"
+    codesign --force --sign "Developer ID Application" --timestamp "$DMG"
+
+    echo "==> DMG notarisieren"
+    notarize "$DMG"
+    xcrun stapler staple "$DMG"
+
     echo
     echo "✅ Fertig: $APP (signiert + notarisiert)"
-    echo "   Weitergeben: $ZIP"
+    echo "   Download für Menschen: $DMG"
+    echo "   Sparkle-Update:        $ZIP"
 else
     echo "==> Zippen"
     rm -f "$ZIP"
     ditto -c -k --keepParent "$APP" "$ZIP"
+
+    echo "==> DMG bauen (ohne Signatur/Notarisierung)"
+    scripts/make-dmg.sh "$APP" "$DMG" || true
 
     echo
     echo "✅ Fertig: $ZIP (ad-hoc, ohne Notarisierung)"

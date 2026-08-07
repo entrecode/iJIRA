@@ -81,6 +81,8 @@ struct HarvestClient: Sendable {
         request.httpMethod = method
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(accountId, forHTTPHeaderField: "Harvest-Account-Id")
+        // Harvest verlangt einen identifizierenden User-Agent mit Kontaktweg —
+        // die Repo-URL statt einer persönlichen Adresse.
         request.setValue("iJIRA (https://github.com/entrecode/iJIRA)", forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let json {

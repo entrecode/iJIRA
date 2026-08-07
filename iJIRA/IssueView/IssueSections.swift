@@ -1311,6 +1311,9 @@ private struct CommentRow: View {
     @Bindable var model: IssueDetailModel
     let comment: CommentDTO
 
+    @State private var hovering = false
+    @State private var copiedLink = false
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             AvatarView(url: comment.author?.avatar48.flatMap { URL(string: $0) },
@@ -1324,6 +1327,19 @@ private struct CommentRow: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
+                    // Erscheint beim Überfahren der Zeile. Nur ausgeblendet
+                    // statt entfernt, damit die Kopfzeile nicht springt —
+                    // klickbar ist er ohnehin nur, wenn die Maus hier ist.
+                    Button {
+                        copyWithFeedback(model.commentWebURL(comment), into: $copiedLink)
+                    } label: {
+                        Image(systemName: copiedLink ? "checkmark" : "link")
+                            .font(.caption2)
+                            .foregroundStyle(copiedLink ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(hovering || copiedLink ? 1 : 0)
+                    .help("Link zum Kommentar kopieren")
                 }
                 if let body = comment.body {
                     ADFContentView(
@@ -1334,5 +1350,6 @@ private struct CommentRow: View {
                 }
             }
         }
+        .onHover { hovering = $0 }
     }
 }

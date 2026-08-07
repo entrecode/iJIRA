@@ -47,7 +47,7 @@ unten unter „Erledigt" sind umgesetzt.
 
 - **Reactions anzeigen/senden:** Mit API-Token-Auth (Basic) gibt es keinen
   funktionierenden Zugang zu Jira-Cloud-Kommentar-Reactions. Live gegen
-  `dein-team.atlassian.net` mit echten Credentials verifiziert:
+  einer Jira-Cloud-Instanz mit echten Credentials verifiziert:
   - `POST /rest/internal/2/reactions/view` + `/emojis` (im Atlassian-KB
     beschrieben): existiert nicht mehr → 404 „No endpoint".
   - `/gateway/api/reactions/reactions` (GET/POST/DELETE; der Weg der Web-UI):

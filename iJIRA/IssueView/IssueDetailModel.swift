@@ -78,6 +78,12 @@ final class IssueDetailModel {
     var attachments: [AttachmentDTO] { detail?.fields.attachment ?? [] }
     var webURL: URL? { URL(string: appState.issueWebURL(issueKey)) }
 
+    /// Deeplink auf genau diesen Kommentar — Jira springt beim Öffnen dorthin
+    /// (`…/browse/KEY?focusedCommentId=…`).
+    func commentWebURL(_ comment: CommentDTO) -> String {
+        appState.issueWebURL(issueKey, commentId: comment.id)
+    }
+
     // MARK: - Laden
 
     func load() async {

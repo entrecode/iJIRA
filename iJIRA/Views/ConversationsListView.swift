@@ -119,6 +119,24 @@ extension Date {
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: self, relativeTo: reference)
     }
+
+    /// Genaues Datum samt Uhrzeit („Mittwoch, 5. August 2026 um 10:14") — die
+    /// Auflösung hinter jeder relativen Angabe, siehe `RelativeTimeText`.
+    ///
+    /// Zeitzone bewusst explizit auf Europe/Berlin statt Systemzeit: So nennen
+    /// alle im Team dieselbe Uhrzeit, auch wenn jemand gerade woanders sitzt.
+    var absoluteLong: String { Date.absoluteFormatter.string(from: self) }
+
+    // Einmal aufgebaut: Formatter sind teuer, und `RelativeTimeText` rendert
+    // minütlich neu — je sichtbarer Zeile.
+    fileprivate static let absoluteFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.timeZone = TimeZone(identifier: "Europe/Berlin")
+        formatter.dateStyle = .full
+        formatter.timeStyle = .short
+        return formatter
+    }()
 }
 
 /// Selbst-aktualisierendes Relativ-Zeitlabel. `RelativeDateTimeFormatter`
@@ -133,5 +151,7 @@ struct RelativeTimeText: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             Text(date.relativeShort(to: context.date))
         }
+        // Mouse-over löst die relative Angabe in Datum + Uhrzeit auf.
+        .help(date.absoluteLong)
     }
 }

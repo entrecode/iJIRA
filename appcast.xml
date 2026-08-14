@@ -3,6 +3,25 @@
     <channel>
         <title>iJIRA</title>
         <item>
+            <title>1.1.1</title>
+            <pubDate>Fri, 14 Aug 2026 16:18:29 +0200</pubDate>
+            <link>https://github.com/entrecode/iJIRA</link>
+            <sparkle:version>59</sparkle:version>
+            <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[
+### Behoben
+
+- **Components im „Neues Issue"-Dialog abwählbar:** Im Components-Dropdown des
+  Anlegen-Dialogs ließen sich einmal gewählte Komponenten nicht wieder
+  abwählen — nur neue hinzufügen. Die Einträge sind jetzt native abhakbare
+  Menüpunkte, An- und Abwählen funktioniert in beide Richtungen.
+
+]]></description>
+            <enclosure url="https://github.com/entrecode/iJIRA/releases/download/1.1.1/iJIRA-1.1.1.zip" length="3661804" type="application/octet-stream" sparkle:edSignature="r8KjisARNQe9KyFeDTkaOqdbdPi6w4OAd62e0KBllmMz+RrCg+YUgfG56EwQhAA7DF3gjZQGqkuDRFgGCYLJCA=="/>
+        </item>
+        <item>
             <title>1.1.0</title>
             <pubDate>Fri, 07 Aug 2026 16:58:02 +0200</pubDate>
             <link>https://github.com/entrecode/iJIRA</link>

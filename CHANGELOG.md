@@ -9,6 +9,13 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Components im „Neues Issue"-Dialog abwählbar:** Im Components-Dropdown des
+  Anlegen-Dialogs ließen sich einmal gewählte Komponenten nicht wieder
+  abwählen — nur neue hinzufügen. Die Einträge sind jetzt native abhakbare
+  Menüpunkte, An- und Abwählen funktioniert in beide Richtungen.
+
 ## [1.1.0] – 2026-08-07
 
 ### Hinzugefügt

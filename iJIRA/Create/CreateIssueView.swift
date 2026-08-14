@@ -158,19 +158,9 @@ struct CreateIssueView: View {
                 Button("Keine Komponenten im Projekt") {}.disabled(true)
             }
             ForEach(components) { component in
-                Button {
-                    if selectedComponentIds.contains(component.id) {
-                        selectedComponentIds.remove(component.id)
-                    } else {
-                        selectedComponentIds.insert(component.id)
-                    }
-                } label: {
-                    if selectedComponentIds.contains(component.id) {
-                        Label(component.name, systemImage: "checkmark")
-                    } else {
-                        Text(component.name)
-                    }
-                }
+                // Toggle statt Button mit eigenem Checkmark: nur so lässt sich
+                // die Auswahl im macOS-Menü zuverlässig auch wieder abwählen.
+                Toggle(component.name, isOn: componentSelectionBinding(component.id))
             }
         } label: {
             Text(selectedComponentsLabel)
@@ -178,6 +168,18 @@ struct CreateIssueView: View {
         }
         .menuStyle(.borderlessButton)
         .disabled(components.isEmpty)
+    }
+
+    private func componentSelectionBinding(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedComponentIds.contains(id) },
+            set: { isOn in
+                if isOn {
+                    selectedComponentIds.insert(id)
+                } else {
+                    selectedComponentIds.remove(id)
+                }
+            })
     }
 
     private var selectedComponentsLabel: String {

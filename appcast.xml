@@ -3,6 +3,46 @@
     <channel>
         <title>iJIRA</title>
         <item>
+            <title>1.2.0</title>
+            <pubDate>Wed, 07 Oct 2026 13:18:37 +0200</pubDate>
+            <link>https://github.com/entrecode/iJIRA</link>
+            <sparkle:version>62</sparkle:version>
+            <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[
+### Hinzugefügt
+
+- **Tabellen:** Tabellen in Beschreibungen und Kommentaren werden jetzt als
+  echte Tabelle dargestellt statt als Hinweis „bitte im Web ansehen" — mit
+  Kopfzeile, Zeilenumbruch in langen Zellen, verbundenen Zellen und
+  Zellfarben. In der Menüleiste erscheinen sie kompakt Zeile für Zeile.
+- **Markdown-Tabellen schreiben:** Eine Markdown-Tabelle (`| a | b |` mit
+  `|---|---|`-Trennzeile) in Kommentar, Beschreibung oder neuem Issue wird zur
+  echten Jira-Tabelle — im Web wie in iJIRA. Beim Bearbeiten der Beschreibung
+  erscheinen vorhandene Tabellen als Markdown-Tabelle an ihrer Stelle (statt
+  ans Ende zu rücken); nur Tabellen mit verbundenen oder eingefärbten Zellen
+  bleiben unverändert erhalten. Im Editor sind Tabellenzeilen monospaced.
+- **Mehr Markdown:** Eingefügtes Markdown kommt jetzt so in Jira an, wie es
+  gemeint ist: verschachtelte Listen per Einrückung, Aufgabenlisten
+  (`- [ ]` / `- [x]`), Listen ab beliebiger Nummer, `~~durchgestrichen~~`,
+  `_kursiv_`/`__fett__`/`***beides***`, verschachtelte Formatierung
+  (**fett mit `code`**), Escapes (`\*`), `~~~`-Code-Blöcke, `***`/`___` als
+  Trennlinie, `<br>` und `<https://…>`. `snake_case` und `5 * 3` bleiben Text.
+  Aufgabenlisten werden auch in iJIRA dargestellt.
+
+### Behoben
+
+- **Beschreibung bearbeiten:** Text, der wie Formatierung aussieht (`*`,
+  `_` am Wortrand, „1." oder „-" am Zeilenanfang), wird beim Öffnen des
+  Editors escaped und beim Speichern nicht mehr ungewollt zu Liste oder
+  Kursivschrift. Zeilenumbrüche in Listenpunkten und verschachtelte Listen
+  überstehen das Speichern.
+
+]]></description>
+            <enclosure url="https://github.com/entrecode/iJIRA/releases/download/1.2.0/iJIRA-1.2.0.zip" length="3724671" type="application/octet-stream" sparkle:edSignature="Waa0qJ3GYQ1VfAYvOo2f1Oi4fNvpBBNL+lE39SgfotZ3GkVUxYs2ipbGWXlh47MK4+4yN4WHo+fAiCzNzLymAA=="/>
+        </item>
+        <item>
             <title>1.1.1</title>
             <pubDate>Fri, 14 Aug 2026 16:18:29 +0200</pubDate>
             <link>https://github.com/entrecode/iJIRA</link>

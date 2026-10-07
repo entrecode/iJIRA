@@ -38,13 +38,36 @@ extension ADFNode {
             result += piece
             result += AttributedString("\n")
             skipContent = true
+        case "tableRow":
+            // Kompakt: eine Zeile pro Tabellenzeile, Zellen mit │ getrennt.
+            for (index, cell) in (content ?? []).enumerated() {
+                if index > 0 {
+                    var separator = AttributedString("  │  ")
+                    separator.foregroundColor = .secondary
+                    result += separator
+                }
+                var cellText = AttributedString()
+                cell.build(into: &cellText)
+                while cellText.characters.last == "\n" {
+                    let lastIndex = cellText.index(cellText.endIndex, offsetByCharacters: -1)
+                    cellText.removeSubrange(lastIndex..<cellText.endIndex)
+                }
+                if cell.type == "tableHeader" {
+                    cellText.font = .body.bold()
+                }
+                result += cellText
+            }
+            result += AttributedString("\n")
+            skipContent = true
+        case "taskItem":
+            result += AttributedString(attrs?.state == "DONE" ? "☑ " : "☐ ")
         default:
             break
         }
         if !skipContent {
             content?.forEach { $0.build(into: &result) }
         }
-        if type == "paragraph" {
+        if type == "paragraph" || type == "taskItem" {
             result += AttributedString("\n")
         }
     }
@@ -59,6 +82,8 @@ extension ADFNode {
                 piece.font = .body.italic()
             case "code":
                 piece.font = .system(.body, design: .monospaced)
+            case "strike":
+                piece.strikethroughStyle = .single
             case "link":
                 if let href = mark.attrs?.href ?? mark.attrs?.url, let url = URL(string: href) {
                     piece.link = url

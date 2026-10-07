@@ -13,7 +13,7 @@ Ab Version 1.1.0 hält sich die App selbst aktuell (Sparkle): Sie sucht im Hinte
 ## Features
 
 - **JIRA-Notifications**: Direkte Notifications (neue Kommentare, Zuweisungen, Mentions) in einer Messenger-artigen Timeline.
-- **Antworten**: Kommentare direkt aus der App verfassen, mit Markdown-Support (`code`, Code-Blöcke, **fett**, *kursiv*).
+- **Antworten**: Kommentare direkt aus der App verfassen, mit Markdown-Support (`code`, Code-Blöcke, **fett**, *kursiv*, Listen, Aufgaben, Tabellen) — eingefügtes Markdown wird zu nativem Jira-Format, Tabellen werden auch in der App als Tabelle dargestellt.
 - **Review & Plan**: Sprint-Review-Ansicht — meine Sprint-Issues nach Thema (Epic) gruppiert, sortiert nach der im Sprint geloggten Zeit (aus Harvest, sonst aus den Jira-Worklogs), getrennt in fertig/nicht fertig; darunter der nächste Sprint und die nicht eingeplanten Issues.
 - **macOS Integration**: Automatische Aktualisierung mit echten macOS-Push-Benachrichtigungen (Notification Center) und Menüleisten-Icon mit Badge.
 - **Leichtgewichtig**: Hybrid-App mit AppKit (`NSStatusItem`, `NSPopover`) für die Hülle und SwiftUI für die Inhalte.

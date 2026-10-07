@@ -40,8 +40,9 @@ final class DropAwareTextView: NSTextView {
 }
 
 /// NSTextView-Wrapper mit Live-Markdown-Syntaxfärbung.
-/// Unterstützt dieselbe Syntax wie `markdownToADFBody`: ```blocks```, `code`,
-/// **fett**, *kursiv*, # Überschriften, Listen, @[Mention](id), [Link](url).
+/// Hebt die Syntax von `markdownToADFBody` hervor: ```blocks```, `code`,
+/// **fett**, *kursiv*, ~~durch~~, # Überschriften, Listen, Tabellen,
+/// @[Mention](id), [Link](url).
 struct MarkdownTextEditor: NSViewRepresentable {
     @Binding var text: String
     /// Optional: Controller für Mention-Einfügung.
@@ -169,7 +170,14 @@ private enum MDPattern {
     static let mention = try! NSRegularExpression(pattern: "@\\[[^\\]\n]+\\]\\([^)\n]+\\)")
     static let mediaToken = try! NSRegularExpression(pattern: "!\\[[^\\]\n]*\\]\\(media:[^)\n]+\\)")
     static let heading = try! NSRegularExpression(pattern: "^#{1,6} .*$", options: .anchorsMatchLines)
-    static let listMarker = try! NSRegularExpression(pattern: "^(- |\\* |\\d+\\. |> )", options: .anchorsMatchLines)
+    static let listMarker = try! NSRegularExpression(
+        pattern: "^[ \\t]*([-*+] (?:\\[[ xX]\\] )?|\\d+[.)] |> )", options: .anchorsMatchLines)
+    static let strike = try! NSRegularExpression(pattern: "~~[^~\n]+~~")
+    /// Tabellenzeilen (beginnen mit |) — monospaced, damit Spalten fluchten.
+    static let tableRow = try! NSRegularExpression(pattern: "^[ \\t]*\\|.*$", options: .anchorsMatchLines)
+    static let tableDelimiter = try! NSRegularExpression(
+        pattern: "^[ \\t]*\\|?[ \\t]*:?-+:?[ \\t]*(\\|[ \\t]*:?-+:?[ \\t]*)+\\|?[ \\t]*$",
+        options: .anchorsMatchLines)
 }
 
 private func applyMarkdownStyling(to tv: NSTextView) {
@@ -182,6 +190,18 @@ private func applyMarkdownStyling(to tv: NSTextView) {
 
     // Reset
     storage.setAttributes([.font: baseFont, .foregroundColor: NSColor.labelColor], range: full)
+
+    // Tabellen: monospaced, Trennzeile dezent
+    MDPattern.tableRow.enumerateMatches(in: str, range: full) { m, _, _ in
+        guard let r = m?.range else { return }
+        storage.addAttribute(.font,
+                             value: NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+                             range: r)
+    }
+    MDPattern.tableDelimiter.enumerateMatches(in: str, range: full) { m, _, _ in
+        guard let r = m?.range else { return }
+        storage.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: r)
+    }
 
     // Code blocks
     MDPattern.codeBlock.enumerateMatches(in: str, range: full) { m, _, _ in
@@ -214,6 +234,12 @@ private func applyMarkdownStyling(to tv: NSTextView) {
         guard let r = m?.range else { return }
         let italicFont = NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask)
         storage.addAttribute(.font, value: italicFont, range: r)
+    }
+
+    // Durchgestrichen
+    MDPattern.strike.enumerateMatches(in: str, range: full) { m, _, _ in
+        guard let r = m?.range else { return }
+        storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: r)
     }
 
     // Mentions (@[Name](id))

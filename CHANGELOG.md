@@ -9,6 +9,34 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Tabellen:** Tabellen in Beschreibungen und Kommentaren werden jetzt als
+  echte Tabelle dargestellt statt als Hinweis „bitte im Web ansehen" — mit
+  Kopfzeile, Zeilenumbruch in langen Zellen, verbundenen Zellen und
+  Zellfarben. In der Menüleiste erscheinen sie kompakt Zeile für Zeile.
+- **Markdown-Tabellen schreiben:** Eine Markdown-Tabelle (`| a | b |` mit
+  `|---|---|`-Trennzeile) in Kommentar, Beschreibung oder neuem Issue wird zur
+  echten Jira-Tabelle — im Web wie in iJIRA. Beim Bearbeiten der Beschreibung
+  erscheinen vorhandene Tabellen als Markdown-Tabelle an ihrer Stelle (statt
+  ans Ende zu rücken); nur Tabellen mit verbundenen oder eingefärbten Zellen
+  bleiben unverändert erhalten. Im Editor sind Tabellenzeilen monospaced.
+- **Mehr Markdown:** Eingefügtes Markdown kommt jetzt so in Jira an, wie es
+  gemeint ist: verschachtelte Listen per Einrückung, Aufgabenlisten
+  (`- [ ]` / `- [x]`), Listen ab beliebiger Nummer, `~~durchgestrichen~~`,
+  `_kursiv_`/`__fett__`/`***beides***`, verschachtelte Formatierung
+  (**fett mit `code`**), Escapes (`\*`), `~~~`-Code-Blöcke, `***`/`___` als
+  Trennlinie, `<br>` und `<https://…>`. `snake_case` und `5 * 3` bleiben Text.
+  Aufgabenlisten werden auch in iJIRA dargestellt.
+
+### Behoben
+
+- **Beschreibung bearbeiten:** Text, der wie Formatierung aussieht (`*`,
+  `_` am Wortrand, „1." oder „-" am Zeilenanfang), wird beim Öffnen des
+  Editors escaped und beim Speichern nicht mehr ungewollt zu Liste oder
+  Kursivschrift. Zeilenumbrüche in Listenpunkten und verschachtelte Listen
+  überstehen das Speichern.
+
 ## [1.1.1] – 2026-08-14
 
 ### Behoben

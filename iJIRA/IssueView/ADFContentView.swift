@@ -112,12 +112,29 @@ struct ADFContentView: View {
             )
 
         case "table":
+            return tableView(node)
+
+        case "taskList", "decisionList":
             return AnyView(
-                Label("Tabelle — bitte im Web ansehen", systemImage: "tablecells")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 4) {
+                    blockViews(node.content ?? [])
+                }
+                .padding(.leading, 2)
+            )
+
+        case "taskItem", "decisionItem":
+            let done = node.attrs?.state == "DONE"
+            let icon = node.type == "decisionItem"
+                ? "arrow.triangle.branch"
+                : (done ? "checkmark.square.fill" : "square")
+            return AnyView(
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: icon)
+                        .foregroundStyle(done ? Color.accentColor : .secondary)
+                        .frame(minWidth: 16, alignment: .trailing)
+                    paragraphView(node.content ?? [])
+                        .foregroundStyle(done ? .secondary : .primary)
+                }
             )
 
         default:
@@ -131,11 +148,12 @@ struct ADFContentView: View {
 
     private func listView(_ node: ADFNode, ordered: Bool) -> AnyView {
         let items = node.content ?? []
+        let start = node.attrs?.order ?? 1
         return AnyView(
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(ordered ? "\(index + 1)." : "•")
+                        Text(ordered ? "\(start + index)." : "•")
                             .font(.body)
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 16, alignment: .trailing)
@@ -147,6 +165,49 @@ struct ADFContentView: View {
             }
             .padding(.leading, 2)
         )
+    }
+
+    // MARK: - Tabellen
+
+    /// Tabelle mit Rahmen, Kopfzeilen-Hintergrund und verbundenen Zellen.
+    /// Die Positionen (inkl. Zeilen-/Spaltenverbund) werden hier vorab
+    /// berechnet; die Größen verteilt `ADFTableLayout`.
+    private func tableView(_ node: ADFNode) -> AnyView {
+        let cells = ADFTableLayout.positionedCells(node)
+        guard !cells.isEmpty else { return AnyView(EmptyView()) }
+        return AnyView(
+            ADFTableLayout {
+                ForEach(Array(cells.enumerated()), id: \.offset) { _, entry in
+                    tableCell(entry.cell)
+                        .layoutValue(key: ADFTableCellPosition.self, value: entry.position)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.35), lineWidth: 1))
+        )
+    }
+
+    private func tableCell(_ cell: ADFNode) -> some View {
+        let isHeader = cell.type == "tableHeader"
+        return VStack(alignment: .leading, spacing: 6) {
+            blockViews(cell.content ?? [])
+        }
+        .fontWeight(isHeader ? .semibold : nil)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        // Füllt die vom Layout zugeteilte Fläche, damit Hintergrund und
+        // Rahmen bündig sind. Unbedenklich, weil `ADFTableLayout` beim
+        // Messen nie eine endliche Höhe vorschlägt (vgl. Zitat-Kommentar).
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(cellBackground(cell, isHeader: isHeader))
+        .overlay(Rectangle().stroke(Color.secondary.opacity(0.25), lineWidth: 0.5))
+    }
+
+    private func cellBackground(_ cell: ADFNode, isHeader: Bool) -> Color {
+        if let hex = cell.attrs?.background, let color = Color(adfHex: hex) {
+            return color.opacity(0.5)
+        }
+        return isHeader ? Color.secondary.opacity(0.12) : .clear
     }
 
     // MARK: - Media
@@ -347,6 +408,159 @@ struct ADFContentView: View {
         case "note": return (.purple, "note.text")
         default: return (.blue, "info.circle")
         }
+    }
+}
+
+// MARK: - Tabellen-Layout
+
+/// Lage einer Zelle im Tabellenraster (nach Auflösung von Zeilen-/Spaltenverbund).
+struct ADFTableCellPosition: LayoutValueKey {
+    static let defaultValue = Position(row: 0, column: 0, rowSpan: 1, columnSpan: 1)
+
+    struct Position: Equatable {
+        let row: Int
+        let column: Int
+        let rowSpan: Int
+        let columnSpan: Int
+    }
+}
+
+/// Raster-Layout für ADF-Tabellen. Spalten bekommen ihre natürliche Breite;
+/// passt die Tabelle nicht, wird der Platz „wasserstandsartig" verteilt:
+/// schmale Spalten behalten ihre Breite, breite teilen sich den Rest und
+/// brechen um. Zeilenhöhe = höchste Zelle.
+///
+/// Eine Mindestbreite pro Spalte lässt sich nicht messen: mit Breite 0
+/// gemessen bricht `Text` zeichen-, nicht wortweise um.
+///
+/// Gemessen wird immer mit unbestimmter Höhe — so bleiben die Zellen, die
+/// mit `maxHeight: .infinity` ihre Fläche füllen, beim Messen harmlos.
+struct ADFTableLayout: Layout {
+    var minColumnWidth: CGFloat = 56
+
+    /// Zellen der Tabelle mit ihrer Rasterposition. Von Zeilenverbund
+    /// belegte Plätze werden übersprungen — wie Jira es erwartet: Folgezeilen
+    /// lassen die überdeckten Zellen einfach weg.
+    static func positionedCells(_ table: ADFNode) -> [(cell: ADFNode, position: ADFTableCellPosition.Position)] {
+        var result: [(ADFNode, ADFTableCellPosition.Position)] = []
+        var occupied = Set<[Int]>()
+        let rows = (table.content ?? []).filter { $0.type == "tableRow" }
+        for (rowIndex, row) in rows.enumerated() {
+            var column = 0
+            for cell in row.content ?? [] where cell.type == "tableCell" || cell.type == "tableHeader" {
+                while occupied.contains([rowIndex, column]) { column += 1 }
+                let rowSpan = max(1, min(cell.attrs?.rowspan ?? 1, rows.count - rowIndex))
+                let columnSpan = max(1, cell.attrs?.colspan ?? 1)
+                for r in rowIndex..<(rowIndex + rowSpan) {
+                    for c in column..<(column + columnSpan) { occupied.insert([r, c]) }
+                }
+                result.append((cell, .init(row: rowIndex, column: column,
+                                           rowSpan: rowSpan, columnSpan: columnSpan)))
+                column += columnSpan
+            }
+        }
+        return result
+    }
+
+    struct Metrics {
+        var columnWidths: [CGFloat]
+        var rowHeights: [CGFloat]
+
+        func x(_ column: Int) -> CGFloat { columnWidths.prefix(column).reduce(0, +) }
+        func y(_ row: Int) -> CGFloat { rowHeights.prefix(row).reduce(0, +) }
+        func width(_ p: ADFTableCellPosition.Position) -> CGFloat {
+            columnWidths[p.column..<(p.column + p.columnSpan)].reduce(0, +)
+        }
+        func height(_ p: ADFTableCellPosition.Position) -> CGFloat {
+            rowHeights[p.row..<(p.row + p.rowSpan)].reduce(0, +)
+        }
+    }
+
+    func makeCache(subviews: Subviews) -> [CGFloat: Metrics] { [:] }
+
+    func updateCache(_ cache: inout [CGFloat: Metrics], subviews: Subviews) {
+        cache.removeAll()
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews,
+                      cache: inout [CGFloat: Metrics]) -> CGSize {
+        let m = metrics(for: proposal.width, subviews: subviews, cache: &cache)
+        return CGSize(width: m.columnWidths.reduce(0, +), height: m.rowHeights.reduce(0, +))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews,
+                       cache: inout [CGFloat: Metrics]) {
+        let m = metrics(for: bounds.width, subviews: subviews, cache: &cache)
+        for subview in subviews {
+            let p = subview[ADFTableCellPosition.self]
+            subview.place(at: CGPoint(x: bounds.minX + m.x(p.column), y: bounds.minY + m.y(p.row)),
+                          proposal: ProposedViewSize(width: m.width(p), height: m.height(p)))
+        }
+    }
+
+    private func metrics(for width: CGFloat?, subviews: Subviews,
+                         cache: inout [CGFloat: Metrics]) -> Metrics {
+        let key = width ?? -1
+        if let cached = cache[key] { return cached }
+        let positions = subviews.map { $0[ADFTableCellPosition.self] }
+        let columns = positions.map { $0.column + $0.columnSpan }.max() ?? 0
+        let rows = positions.map { $0.row + $0.rowSpan }.max() ?? 0
+
+        // Natürliche (einzeilige) Spaltenbreiten aus den nicht verbundenen Zellen.
+        var ideal = Array(repeating: CGFloat(24), count: columns)
+        for (subview, p) in zip(subviews, positions) where p.columnSpan == 1 {
+            ideal[p.column] = max(ideal[p.column], ceil(subview.sizeThatFits(.unspecified).width))
+        }
+        let widths = distribute(ideal: ideal, available: width)
+
+        var heights = Array(repeating: CGFloat(0), count: rows)
+        var metrics = Metrics(columnWidths: widths, rowHeights: heights)
+        func measure(_ subview: LayoutSubview, _ p: ADFTableCellPosition.Position) -> CGFloat {
+            ceil(subview.sizeThatFits(ProposedViewSize(width: metrics.width(p), height: nil)).height)
+        }
+        for (subview, p) in zip(subviews, positions) where p.rowSpan == 1 {
+            heights[p.row] = max(heights[p.row], measure(subview, p))
+        }
+        metrics.rowHeights = heights
+        // Zeilenverbund: fehlende Höhe der letzten überdeckten Zeile zuschlagen.
+        for (subview, p) in zip(subviews, positions) where p.rowSpan > 1 {
+            let missing = measure(subview, p) - metrics.height(p)
+            if missing > 0 { metrics.rowHeights[p.row + p.rowSpan - 1] += missing }
+        }
+        cache[key] = metrics
+        return metrics
+    }
+
+    private func distribute(ideal: [CGFloat], available: CGFloat?) -> [CGFloat] {
+        guard let available, ideal.reduce(0, +) > available else { return ideal }
+        var widths = ideal
+        var open = Array(ideal.indices)
+        var remaining = available
+        while !open.isEmpty {
+            let share = remaining / CGFloat(open.count)
+            let fitting = open.filter { ideal[$0] <= share }
+            if fitting.isEmpty {
+                for column in open { widths[column] = max(share, minColumnWidth) }
+                break
+            }
+            for column in fitting {
+                widths[column] = ideal[column]
+                remaining -= ideal[column]
+            }
+            open.removeAll { fitting.contains($0) }
+        }
+        return widths
+    }
+}
+
+extension Color {
+    /// ADF-Zellfarben kommen als "#rrggbb".
+    init?(adfHex: String) {
+        let hex = adfHex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard hex.count == 6, let value = UInt32(hex, radix: 16) else { return nil }
+        self.init(red: Double((value >> 16) & 0xFF) / 255,
+                  green: Double((value >> 8) & 0xFF) / 255,
+                  blue: Double(value & 0xFF) / 255)
     }
 }
 

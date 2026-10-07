@@ -114,7 +114,9 @@ struct ADFNode: Codable, Sendable {
             if let text { out += text }
         }
         content?.forEach { $0.append(into: &out) }
-        if type == "paragraph" { out += "\n" }
+        // taskItem trägt Inline-Inhalt direkt (ohne Absatz) — sonst kleben
+        // aufeinanderfolgende Aufgaben aneinander.
+        if type == "paragraph" || type == "taskItem" { out += "\n" }
     }
 }
 
@@ -146,4 +148,17 @@ struct ADFAttrs: Codable, Sendable {
     let height: Double?
     let occurrenceKey: String?
     let layout: String?
+    /// orderedList: Startnummer.
+    let order: Int?
+    /// taskList/taskItem: Pflicht-ID bzw. Status ("TODO"/"DONE").
+    let localId: String?
+    let state: String?
+    // Tabellen-Roundtrip: Zellen-Verbund, Spaltenbreiten, Hintergrund und
+    // Tabellen-Optionen — sonst gehen sie beim Speichern der Beschreibung verloren.
+    let colspan: Int?
+    let rowspan: Int?
+    let colwidth: [Double]?
+    let background: String?
+    let isNumberColumnEnabled: Bool?
+    let displayMode: String?
 }

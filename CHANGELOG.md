@@ -9,6 +9,14 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Update-Dialog auf Deutsch:** Der Update-Dialog (Sparkle) erschien auf
+  Englisch, weil die App macOS gegenüber nur Englisch als Sprache angab.
+  iJIRA ist jetzt als deutschsprachig ausgewiesen; damit erscheinen auch
+  System-Texte wie Standard-Menüeinträge auf Deutsch. Wirkt ab dem Update
+  *nach* dieser Version — den Dialog zeigt immer die gerade installierte App.
+
 ## [1.2.0] – 2026-10-07
 
 ### Hinzugefügt

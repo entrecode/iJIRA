@@ -5,6 +5,11 @@ options:
     macOS: "14.0"
   createIntermediateGroups: true
   groupSortPosition: top
+  # Die App ist deutschsprachig. macOS wählt die Sprache pro App aus den
+  # Sprachen, die die App selbst anbietet — eingebettete Frameworks folgen
+  # dieser Wahl. Mit „en" zeigte Sparkle seinen Update-Dialog daher auf
+  # Englisch, obwohl es eine deutsche Übersetzung mitbringt.
+  developmentLanguage: de
 
 packages:
   Sparkle:
@@ -43,6 +48,9 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSHumanReadableCopyright: ""
+        # Siehe developmentLanguage: Deutsch als (einzige) App-Sprache.
+        CFBundleLocalizations:
+          - de
         # App-Icon (Dock/Cmd-Tab/Finder) — erzeugt via scripts/generate-icon.swift
         CFBundleIconFile: AppIcon
         # Deep-Link: ijira://issue/ONE-1234 öffnet das Issue-Fenster

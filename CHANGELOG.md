@@ -9,7 +9,19 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Neu
+
+- **Archivierte Issues erkennbar:** Ein Banner über dem Titel zeigt an, wenn
+  ein Issue archiviert ist (wann und von wem). Solange es archiviert ist, sind
+  alle Eingabefelder gesperrt. Mit „Aus dem Archiv holen“ lässt es sich direkt
+  wiederherstellen.
+
 ### Behoben
+
+- **Falscher Anmeldefehler:** Fehlte nur die Berechtigung für eine Aktion
+  (HTTP 403, z. B. bei archivierten Issues), meldete die App „Anmeldung
+  fehlgeschlagen – E-Mail oder API-Token prüfen“. Jetzt erscheint Jiras
+  eigentliche Fehlermeldung.
 
 - **Update-Dialog auf Deutsch:** Der Update-Dialog (Sparkle) erschien auf
   Englisch, weil die App macOS gegenüber nur Englisch als Sprache angab.

@@ -67,6 +67,9 @@ struct IssueDetailContent: View {
                     if showsIdentityRow {
                         identityRow(detail: detail)
                     }
+                    if let archive = model.archiveStatus, archive.isArchived {
+                        ArchivedBanner(model: model, status: archive)
+                    }
                     IssueTitleSection(model: model, detail: detail)
                     IssueMetaSection(model: model, detail: detail)
                     IssueDescriptionSection(model: model, detail: detail)
@@ -82,10 +85,12 @@ struct IssueDetailContent: View {
                 .padding(20)
             }
             // Dateien aus dem Finder auf das Fenster ziehen → Anhang-Upload.
+            // Archivierte Issues nehmen keine Anhänge an.
             .dropDestination(for: URL.self) { urls, _ in
+                guard !model.isArchived else { return false }
                 Task { await model.uploadFiles(urls) }
                 return true
-            } isTargeted: { dropTargeted = $0 }
+            } isTargeted: { dropTargeted = $0 && !model.isArchived }
             .overlay {
                 if dropTargeted {
                     DropHintOverlay()
@@ -124,6 +129,59 @@ struct IssueDetailContent: View {
                 .help("Im Web öffnen")
             }
         }
+    }
+}
+
+/// Hinweis über dem Titel, solange das Issue archiviert (und damit in Jira
+/// schreibgeschützt) ist — samt Knopf zum Zurückholen.
+private struct ArchivedBanner: View {
+    @Bindable var model: IssueDetailModel
+    let status: IssueArchiveStatus
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "archivebox.fill")
+                .font(.title3)
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Archiviert – nur lesbar")
+                    .font(.callout.weight(.semibold))
+                if let details {
+                    Text(details)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if model.isRestoring {
+                ProgressView().controlSize(.small)
+            }
+            Button("Aus dem Archiv holen") {
+                Task { await model.restoreFromArchive() }
+            }
+            .disabled(model.isRestoring)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+    }
+
+    /// „am 05.10.2026 von Simon Scherzinger" — Datum in Europe/Berlin.
+    private var details: String? {
+        var parts: [String] = []
+        if let date = status.archivedOn {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "de_DE")
+            formatter.timeZone = TimeZone(identifier: "Europe/Berlin")
+            formatter.dateFormat = "dd.MM.yyyy"
+            parts.append("am \(formatter.string(from: date))")
+        }
+        if let name = status.archivedBy {
+            parts.append("von \(name)")
+        }
+        return parts.isEmpty ? nil : "Archiviert " + parts.joined(separator: " ")
     }
 }
 
@@ -327,7 +385,7 @@ struct StatusTransitionMenu: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .disabled(model.availableTransitions.isEmpty)
+        .disabled(model.availableTransitions.isEmpty || model.isArchived)
         .help("Status ändern")
     }
 

@@ -42,7 +42,8 @@ struct IssueTitleSection: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.borderless)
-                .opacity(hovering ? 1 : 0)
+                .opacity(hovering && !model.isArchived ? 1 : 0)
+                .disabled(model.isArchived)
                 .help("Titel bearbeiten")
             }
         }
@@ -111,11 +112,13 @@ struct IssueMetaSection: View {
         .task(id: detail.key) { await model.loadEditCatalogs() }
     }
 
-    /// Dezenter Auf-/Ab-Pfeil, der ein Feld als editierbar kennzeichnet.
+    /// Dezenter Auf-/Ab-Pfeil, der ein Feld als editierbar kennzeichnet —
+    /// bei archivierten Issues ausgeblendet (nichts editierbar).
     private var editChevron: some View {
         Image(systemName: "chevron.up.chevron.down")
             .font(.caption2)
             .foregroundStyle(.secondary)
+            .opacity(model.isArchived ? 0 : 1)
     }
 
     // MARK: Issue-Type (editierbar)
@@ -134,6 +137,7 @@ struct IssueMetaSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isArchived)
         .help("Issue-Type ändern")
         .popover(isPresented: $showIssueTypePicker, arrowEdge: .bottom) {
             OptionsPopover(
@@ -161,6 +165,7 @@ struct IssueMetaSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isArchived)
         .help("Components ändern")
         .popover(isPresented: $showComponentsPicker, arrowEdge: .bottom) {
             OptionsPopover(
@@ -206,6 +211,7 @@ struct IssueMetaSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isArchived)
         .help("Team ändern")
         .popover(isPresented: $showTeamPicker, arrowEdge: .bottom) {
             OptionsPopover(
@@ -235,6 +241,7 @@ struct IssueMetaSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isArchived)
         .help("Sprint ändern")
         .popover(isPresented: $showSprintPicker, arrowEdge: .bottom) {
             OptionsPopover(
@@ -270,6 +277,7 @@ struct IssueMetaSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isArchived)
         .help("Labels bearbeiten")
         .popover(isPresented: $showLabelsEditor, arrowEdge: .bottom) {
             LabelsEditorView(model: model)
@@ -291,6 +299,7 @@ struct IssueMetaSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isArchived)
         .help("Fix Version bearbeiten")
         .popover(isPresented: $showFixVersionsEditor, arrowEdge: .bottom) {
             FixVersionsEditorView(model: model)
@@ -346,6 +355,7 @@ struct IssueMetaSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isArchived)
         .popover(isPresented: $showAssigneePicker, arrowEdge: .bottom) {
             PersonPickerView(
                 users: model.assignableUsers.isEmpty ? model.directory.users : model.assignableUsers,
@@ -388,6 +398,7 @@ struct IssueMetaSection: View {
                 editChevron
             }
             .buttonStyle(.plain)
+            .disabled(model.isArchived)
             .help("Parent ändern")
             .popover(isPresented: $showParentPicker, arrowEdge: .bottom) {
                 IssueSuggestionPicker(
@@ -918,6 +929,7 @@ struct IssueDescriptionSection: View {
                     .font(.caption)
             }
             .buttonStyle(.borderless)
+            .disabled(model.isArchived)
         }
     }
 
@@ -1148,7 +1160,8 @@ private struct LinkRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
-            .opacity(hovering ? 1 : 0)
+            .opacity(hovering && !model.isArchived ? 1 : 0)
+            .disabled(model.isArchived)
             .help("Verknüpfung entfernen")
         }
         .onHover { hovering = $0 }
@@ -1196,6 +1209,7 @@ private struct AddLinkButton: View {
                 .font(.caption)
         }
         .buttonStyle(.borderless)
+        .disabled(model.isArchived)
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
             VStack(spacing: 8) {
                 Picker("Beziehung", selection: $selectedOption) {
@@ -1248,6 +1262,8 @@ struct IssueCommentsSection: View {
                     CommentRow(model: model, comment: comment)
                 }
                 composer
+                    .disabled(model.isArchived)
+                    .opacity(model.isArchived ? 0.5 : 1)
             }
         }
     }
@@ -1261,7 +1277,14 @@ struct IssueCommentsSection: View {
                                    onMentionQuery: { mentionQuery = $0 },
                                    onFileDrop: { urls in Task { await uploadDrop(urls) } })
                     .frame(height: 76)
-                if draft.isEmpty {
+                if model.isArchived {
+                    Text("Archivierte Issues können nicht kommentiert werden.")
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 8)
+                        .allowsHitTesting(false)
+                } else if draft.isEmpty {
                     Text("Kommentieren… (`code`, **fett**, *kursiv*, @Name, ONE-123, Bild/Datei hierher ziehen)")
                         .font(.body)
                         .foregroundStyle(.tertiary)

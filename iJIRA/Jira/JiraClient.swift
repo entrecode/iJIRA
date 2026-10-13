@@ -321,22 +321,7 @@ struct JiraClient: Sendable {
     /// Issue anlegen. Validierungsfehler (400) werden mit den Feld-Meldungen
     /// aus dem Body als `JiraError.api` durchgereicht.
     func createIssue(fields: [String: Any]) async throws -> CreatedIssueDTO {
-        var request = try makeRequest("rest/api/3/issue")
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["fields": fields])
-        let (data, response) = try await Self.session.data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode == 400,
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            var messages = (json["errorMessages"] as? [String]) ?? []
-            if let fieldErrors = json["errors"] as? [String: String] {
-                messages += fieldErrors.map { "\($0.key): \($0.value)" }
-            }
-            if !messages.isEmpty {
-                throw JiraError.api(message: messages.joined(separator: " · "))
-            }
-        }
-        return try decode(CreatedIssueDTO.self, data: data, response: response)
+        try await post("rest/api/3/issue", json: ["fields": fields], as: CreatedIssueDTO.self)
     }
 
     // MARK: - Issue-Detail & Bearbeitung
@@ -478,7 +463,7 @@ struct JiraClient: Sendable {
         var request = URLRequest(url: url)
         request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
         let (data, response) = try await Self.mediaSession.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return data
     }
 
@@ -517,6 +502,89 @@ struct JiraClient: Sendable {
         return last.values
     }
 
+    // MARK: - Archiv (GraphQL-Gateway)
+
+    /// Archiv-Status eines Issues. Die REST-API kennt kein Archiv-Flag — ein
+    /// archiviertes Issue kommt dort ganz normal zurück, nur mit leerer
+    /// `editmeta`, ohne Transitions, und jeder Schreibversuch scheitert mit
+    /// 400/403. Das Atlassian-GraphQL-Gateway (`gateway/api/graphql`, akzeptiert
+    /// API-Token-Basic-Auth) liefert `isArchived` direkt mit — live verifiziert
+    /// am 13.10.2026.
+    func archiveStatus(issueKey: String) async throws -> IssueArchiveStatus {
+        let query = """
+            query IJiraIssueArchiveStatus($cloudId: ID!, $key: String!) {
+              jira { issueByKey(cloudId: $cloudId, key: $key) {
+                id isArchived archivedOn archivedBy { name }
+              } }
+            }
+            """
+        let data: ArchiveStatusData = try await graphQL(
+            query, variables: ["cloudId": try await cloudId(), "key": issueKey],
+            as: ArchiveStatusData.self)
+        guard let issue = data.jira?.issueByKey else { throw JiraError.notFound }
+        return IssueArchiveStatus(ari: issue.id,
+                                  isArchived: issue.isArchived ?? false,
+                                  archivedOn: issue.archivedOn.flatMap(JiraDate.parseLoose),
+                                  archivedBy: issue.archivedBy?.name)
+    }
+
+    /// Issue aus dem Archiv zurückholen. Primär über die GraphQL-Mutation, die
+    /// auch die Jira-Web-UI nutzt (Projekt-Berechtigung genügt); scheitert die,
+    /// bleibt der offizielle REST-Endpoint (braucht Jira-Admin-Rechte).
+    /// Mangels archivierbarem Test-Issue nicht live gegengeprüft.
+    func unarchiveIssue(key: String, ari: String) async throws {
+        do {
+            let mutation = """
+                mutation IJiraUnarchiveIssue($ids: [ID!]!) {
+                  jira_unarchiveIssue(input: { ids: $ids }) { success errors { message } }
+                }
+                """
+            let data: UnarchiveData = try await graphQL(mutation, variables: ["ids": [ari]],
+                                                        as: UnarchiveData.self)
+            guard let payload = data.unarchiveIssue else { throw JiraError.invalidResponse }
+            guard payload.success else {
+                let messages = (payload.errors ?? []).compactMap(\.message)
+                throw JiraError.api(message: messages.isEmpty
+                    ? "Wiederherstellen fehlgeschlagen." : messages.joined(separator: " · "))
+            }
+        } catch let graphQLError {
+            Log.app.error("Unarchive via GraphQL fehlgeschlagen (\(String(describing: graphQLError), privacy: .public)) – versuche REST")
+            let response: UnarchiveRESTResponse
+            do {
+                response = try await put("rest/api/3/issue/unarchive",
+                                         json: ["issueIdsOrKeys": [key]],
+                                         as: UnarchiveRESTResponse.self)
+            } catch {
+                // Die GraphQL-Meldung ist meist aussagekräftiger.
+                throw graphQLError
+            }
+            guard (response.numberOfIssuesUpdated ?? 0) > 0 else { throw graphQLError }
+        }
+    }
+
+    /// Cloud-ID der Site (fürs GraphQL-Gateway) — einmal pro Site ermittelt.
+    private func cloudId() async throws -> String {
+        let site = baseURL.absoluteString
+        if let cached = await CloudIdCache.shared.value(for: site) { return cached }
+        let info = try await get("_edge/tenant_info", as: TenantInfo.self)
+        await CloudIdCache.shared.store(info.cloudId, for: site)
+        return info.cloudId
+    }
+
+    private func graphQL<T: Decodable>(_ query: String, variables: [String: Any],
+                                       as type: T.Type) async throws -> T {
+        let response: GraphQLResponse<T> = try await post(
+            "gateway/api/graphql", json: ["query": query, "variables": variables],
+            as: GraphQLResponse<T>.self)
+        // Teilfehler (z. B. ein Feld ohne Berechtigung) kommen mit HTTP 200;
+        // nur wenn gar keine Daten da sind, ist es ein echter Fehler.
+        if let errors = response.errors, !errors.isEmpty, response.data == nil {
+            throw JiraError.api(message: errors.compactMap(\.message).joined(separator: " · "))
+        }
+        guard let data = response.data else { throw JiraError.invalidResponse }
+        return data
+    }
+
     // MARK: - Request plumbing
 
     private func get<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
@@ -529,6 +597,15 @@ struct JiraClient: Sendable {
     private func post<T: Decodable>(_ path: String, json: [String: Any], as type: T.Type) async throws -> T {
         var request = try makeRequest(path)
         request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: json)
+        let (data, response) = try await Self.session.data(for: request)
+        return try decode(T.self, data: data, response: response)
+    }
+
+    private func put<T: Decodable>(_ path: String, json: [String: Any], as type: T.Type) async throws -> T {
+        var request = try makeRequest(path)
+        request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: json)
         let (data, response) = try await Self.session.data(for: request)
@@ -557,12 +634,12 @@ struct JiraClient: Sendable {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: json)
         }
-        let (_, response) = try await Self.session.data(for: request)
-        try validate(response)
+        let (data, response) = try await Self.session.data(for: request)
+        try validate(response, data: data)
     }
 
     private func decode<T: Decodable>(_ type: T.Type, data: Data, response: URLResponse) throws -> T {
-        try validate(response)
+        try validate(response, data: data)
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
@@ -570,13 +647,25 @@ struct JiraClient: Sendable {
         }
     }
 
-    private func validate(_ response: URLResponse) throws {
+    private func validate(_ response: URLResponse, data: Data? = nil) throws {
         guard let http = response as? HTTPURLResponse else { throw JiraError.invalidResponse }
         switch http.statusCode {
         case 200..<300:
             return
-        case 401, 403:
+        case 401:
             throw JiraError.unauthorized
+        case 403:
+            // 403 heißt bei Jira meist „angemeldet, aber nicht erlaubt" (z. B.
+            // archiviertes Issue). Nur wenn Seraph einen Login-Fehler meldet
+            // (CAPTCHA, gesperrter Token), ist es wirklich die Anmeldung.
+            let loginReason = http.value(forHTTPHeaderField: "X-Seraph-LoginReason") ?? ""
+            if loginReason.contains("AUTHENTICATED_FAILED") || loginReason.contains("AUTHENTICATION_DENIED") {
+                throw JiraError.unauthorized
+            }
+            throw JiraError.forbidden(message: Self.errorMessage(in: data))
+        case 400:
+            if let message = Self.errorMessage(in: data) { throw JiraError.api(message: message) }
+            throw JiraError.http(status: 400)
         case 404:
             throw JiraError.notFound
         case 429:
@@ -589,6 +678,18 @@ struct JiraClient: Sendable {
         default:
             throw JiraError.http(status: http.statusCode)
         }
+    }
+
+    /// Fehlermeldungen aus Jiras Standard-Fehler-Body
+    /// (`{"errorMessages": [...], "errors": {"feld": "..."}}`).
+    private static func errorMessage(in data: Data?) -> String? {
+        guard let data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        var messages = (json["errorMessages"] as? [String]) ?? []
+        if let fieldErrors = json["errors"] as? [String: String] {
+            messages += fieldErrors.map { "\($0.key): \($0.value)" }
+        }
+        return messages.isEmpty ? nil : messages.joined(separator: " · ")
     }
 
     private var authorizationHeader: String {
@@ -609,6 +710,8 @@ enum JiraError: Error {
     case invalidResponse
     case decoding
     case unauthorized
+    /// Angemeldet, aber nicht berechtigt (HTTP 403) — Meldung aus dem Body.
+    case forbidden(message: String?)
     case notFound
     case rateLimited(retryAfter: TimeInterval?)
     case http(status: Int)
@@ -625,6 +728,8 @@ enum JiraError: Error {
             return "Antwort konnte nicht gelesen werden."
         case .unauthorized:
             return "Anmeldung fehlgeschlagen – E-Mail oder API-Token prüfen."
+        case .forbidden(let message):
+            return message ?? "Keine Berechtigung für diese Aktion."
         case .notFound:
             return "Endpoint nicht gefunden – stimmt die Site-URL?"
         case .rateLimited:

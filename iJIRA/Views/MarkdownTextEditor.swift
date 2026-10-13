@@ -78,6 +78,8 @@ struct MarkdownTextEditor: NSViewRepresentable {
         guard let tv = scrollView.documentView as? NSTextView else { return }
         controller?.textView = tv
         (tv as? DropAwareTextView)?.onFileDrop = onFileDrop
+        // `.disabled()` erreicht die NSTextView nicht von selbst.
+        tv.isEditable = context.environment.isEnabled
         guard tv.string != text else { return }
 
         let saved = tv.selectedRange()

@@ -25,6 +25,11 @@ final class IssueDetailModel {
     /// Verfügbare Link-Typen (lazy beim ersten „Verknüpfung hinzufügen").
     private(set) var linkTypes: [IssueLinkTypeDTO] = []
 
+    /// Archiv-Status (nil = unbekannt, z. B. Gateway nicht erreichbar).
+    /// Archivierte Issues sind in Jira schreibgeschützt.
+    private(set) var archiveStatus: IssueArchiveStatus?
+    private(set) var isRestoring = false
+
     /// Mögliche Workflow-Übergänge — fürs Status-Dropdown im Header.
     private(set) var availableTransitions: [TransitionDTO] = []
 
@@ -77,6 +82,9 @@ final class IssueDetailModel {
     var siteBaseURL: URL? { appState.siteBaseURL }
     var attachments: [AttachmentDTO] { detail?.fields.attachment ?? [] }
     var webURL: URL? { URL(string: appState.issueWebURL(issueKey)) }
+    var isArchived: Bool { archiveStatus?.isArchived == true }
+
+    private static let archivedMessage = "Das Issue ist archiviert – erst aus dem Archiv holen."
 
     /// Deeplink auf genau diesen Kommentar — Jira springt beim Öffnen dorthin
     /// (`…/browse/KEY?focusedCommentId=…`).
@@ -99,11 +107,14 @@ final class IssueDetailModel {
             // Kinder sind ein Nice-to-have: ein Fehler hier darf das Issue
             // nicht am Laden hindern.
             async let childrenTask = client.childIssues(parentKey: issueKey)
+            // Archiv-Status ebenso: ohne ihn bleibt die Ansicht editierbar.
+            async let archiveTask = client.archiveStatus(issueKey: issueKey)
             detail = try await detailTask
             comments = try await commentsTask
             children = (try? await childrenTask) ?? []
+            archiveStatus = try? await archiveTask
             loadError = nil
-            Log.app.info("Issue \(self.issueKey, privacy: .public) geladen: \(self.comments.count) Kommentare, \(self.attachments.count) Anhänge, \(self.detail?.fields.issuelinks?.count ?? 0) Links, \(self.children.count) untergeordnet")
+            Log.app.info("Issue \(self.issueKey, privacy: .public) geladen: \(self.comments.count) Kommentare, \(self.attachments.count) Anhänge, \(self.detail?.fields.issuelinks?.count ?? 0) Links, \(self.children.count) untergeordnet\(self.isArchived ? ", archiviert" : "")")
             // Harvest-Summe parallel nachziehen (non-blocking, Nice-to-have).
             Task { await self.refreshLoggedTime() }
             // Team + Sprint (dynamische Custom Fields) via Raw-Fetch nachziehen;
@@ -133,6 +144,7 @@ final class IssueDetailModel {
             detail = try await client.issueDetail(key: issueKey)
             comments = (try? await client.allComments(issueKey: issueKey)) ?? comments
             children = (try? await client.childIssues(parentKey: issueKey)) ?? children
+            archiveStatus = (try? await client.archiveStatus(issueKey: issueKey)) ?? archiveStatus
             availableTransitions = (try? await client.transitions(issueKey: issueKey))
                 ?? availableTransitions
         } catch {
@@ -152,6 +164,30 @@ final class IssueDetailModel {
             MainWindowController.shared?.boardStore.kickRefresh()
         }
         return success
+    }
+
+    // MARK: - Archiv
+
+    /// Issue aus dem Archiv zurückholen und danach alles neu laden — erst
+    /// dann liefert Jira wieder Transitions und Edit-Rechte.
+    func restoreFromArchive() async {
+        guard let client, let status = archiveStatus, status.isArchived, !isRestoring else { return }
+        isRestoring = true
+        defer { isRestoring = false }
+        actionError = nil
+        do {
+            try await client.unarchiveIssue(key: issueKey, ari: status.ari)
+            Log.app.info("Issue \(self.issueKey, privacy: .public) aus dem Archiv geholt")
+            archiveStatus = IssueArchiveStatus(ari: status.ari, isArchived: false,
+                                               archivedOn: nil, archivedBy: nil)
+            await refresh()
+            if assignableUsers.isEmpty {
+                assignableUsers = (try? await client.assignableUsers(issueKey: issueKey)) ?? []
+            }
+            MainWindowController.shared?.boardStore.kickRefresh()
+        } catch {
+            actionError = (error as? JiraError)?.userMessage ?? error.localizedDescription
+        }
     }
 
     // MARK: - Feld-Edits
@@ -302,6 +338,10 @@ final class IssueDetailModel {
             actionError = "Nicht mit Jira verbunden."
             return false
         }
+        guard !isArchived else {
+            actionError = Self.archivedMessage
+            return false
+        }
         actionError = nil
         do {
             if let sprint {
@@ -361,6 +401,10 @@ final class IssueDetailModel {
             actionError = "Nicht mit Jira verbunden."
             return false
         }
+        guard !isArchived else {
+            actionError = Self.archivedMessage
+            return false
+        }
         actionError = nil
         do {
             try await operation(client)
@@ -377,6 +421,10 @@ final class IssueDetailModel {
     func addComment(markdown: String) async -> Bool {
         guard let client else {
             actionError = "Nicht mit Jira verbunden."
+            return false
+        }
+        guard !isArchived else {
+            actionError = Self.archivedMessage
             return false
         }
         actionError = nil
@@ -510,6 +558,10 @@ final class IssueDetailModel {
     /// Dateien (Drag & Drop) als Anhänge hochladen.
     func uploadFiles(_ urls: [URL]) async {
         guard let client, !urls.isEmpty else { return }
+        guard !isArchived else {
+            actionError = Self.archivedMessage
+            return
+        }
         isUploading = true
         defer { isUploading = false }
         actionError = nil
@@ -532,6 +584,10 @@ final class IssueDetailModel {
     /// Media-Knoten (Bilder/Videos inline im Kommentar).
     func uploadFilesForComment(_ urls: [URL]) async -> [String] {
         guard let client, !urls.isEmpty else { return [] }
+        guard !isArchived else {
+            actionError = Self.archivedMessage
+            return []
+        }
         isUploading = true
         defer { isUploading = false }
         actionError = nil

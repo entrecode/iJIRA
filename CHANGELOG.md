@@ -9,6 +9,26 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+### Neu
+
+- **Zurück-Button:** Ganz links in der Kopfzeile des Hauptfensters geht es zur
+  vorherigen Ansicht zurück, auch über mehrere Schritte, z. B. vom verlinkten
+  Issue zurück zum vorherigen Issue und weiter zu Review & Plan. Gedrückt
+  halten zeigt den Verlauf zum direkten Springen. Dazu ⌘[ / ⌘] (Menü
+  „Ansicht“) und die Seitentasten der Maus.
+- **Board und Review & Plan merken sich die Scrollposition:** Beim
+  Zurückkehren, egal ob per Zurück, Umschalter oder ⌘1–3, steht alles wie
+  verlassen. In Review & Plan bleiben auch auf- und zugeklappte Themen erhalten.
+- **⌘-Klick öffnet ein neues Fenster:** Auf Issue-Links, Karten und Zeilen
+  öffnet ⌘-Klick (wie bisher ⌥-Klick) das Issue als Einzelfenster. ⌘-Klick auf
+  Zurück öffnet das vorherige Issue im neuen Fenster.
+
+### Geändert
+
+- **Aufgeräumte Kopfzeile:** Die leere Fläche links in der Kopfzeile von
+  Hauptfenster und Issue-Fenstern ist weg; Zurück-Button bzw. Issue-Key stehen
+  jetzt ganz links.
+
 ## [1.3.0] – 2026-10-13
 
 ### Neu

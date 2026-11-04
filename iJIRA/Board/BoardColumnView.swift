@@ -55,7 +55,7 @@ struct BoardColumnView: View {
 }
 
 /// Issue-Karte: kopierbarer Key, Summary, Typ/Priorität/Alter.
-/// Klick → Detailview (⌥-Klick → Einzelfenster), ziehbar für Statuswechsel.
+/// Klick → Detailview (⌘-/⌥-Klick → Einzelfenster), ziehbar für Statuswechsel.
 struct IssueCardView: View {
     let issue: BoardIssueDTO
     @State private var hovering = false

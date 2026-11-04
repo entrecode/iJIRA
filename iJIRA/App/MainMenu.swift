@@ -96,6 +96,15 @@ enum MainMenu {
         review.target = target
         viewMenu.addItem(review)
         viewMenu.addItem(.separator())
+        let back = NSMenuItem(title: "Zurück",
+                              action: #selector(AppDelegate.goBack(_:)), keyEquivalent: "[")
+        back.target = target
+        viewMenu.addItem(back)
+        let forward = NSMenuItem(title: "Vorwärts",
+                                 action: #selector(AppDelegate.goForward(_:)), keyEquivalent: "]")
+        forward.target = target
+        viewMenu.addItem(forward)
+        viewMenu.addItem(.separator())
         let refresh = NSMenuItem(title: "Aktualisieren",
                                  action: #selector(AppDelegate.refreshCurrentTab(_:)), keyEquivalent: "r")
         refresh.target = target

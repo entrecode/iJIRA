@@ -34,12 +34,14 @@ final class IssueWindowManager: NSObject, NSWindowDelegate {
         Task { await userDirectory.preload(client: client) }
     }
 
-    /// Zentrale Öffnen-Routine: standardmäßig ins Hauptfenster (Tab „Issue");
-    /// mit gedrückter ⌥-Taste (oder `preferWindow: true`) als Einzelfenster.
+    /// Zentrale Öffnen-Routine: standardmäßig ins Hauptfenster (Tab „Issue",
+    /// landet im Verlauf); mit gedrückter ⌘- oder ⌥-Taste (oder
+    /// `preferWindow: true`) als Einzelfenster.
     func open(issueKey rawKey: String, preferWindow: Bool? = nil) {
         let key = rawKey.uppercased()
+        let modifiers = NSApp.currentEvent?.modifierFlags ?? []
         let wantsWindow = preferWindow
-            ?? (NSApp.currentEvent?.modifierFlags.contains(.option) ?? false)
+            ?? (modifiers.contains(.command) || modifiers.contains(.option))
         guard wantsWindow else {
             MainWindowController.shared.showIssue(key: key)
             return

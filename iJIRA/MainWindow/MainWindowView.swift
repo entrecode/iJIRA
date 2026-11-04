@@ -1,11 +1,16 @@
 import SwiftUI
 
-/// Inhalt des Hauptfensters: Header mit Board/Issue/Review-Umschalter und dem
-/// immer sichtbaren Suchfeld, darunter der aktive Tab.
+/// Inhalt des Hauptfensters: Header mit Zurück-Button, Board/Issue/Review-
+/// Umschalter und dem immer sichtbaren Suchfeld, darunter der aktive Tab.
 struct MainWindowView: View {
     @Bindable var model: MainWindowModel
     @Bindable var boardStore: BoardStore
     @Bindable var reviewStore: ReviewStore
+
+    /// Board und Review werden beim ersten Besuch aufgebaut und bleiben dann
+    /// bestehen (nur ausgeblendet) — so behalten sie Scrollposition und
+    /// Klappzustände, egal ob man per Zurück, Umschalter oder ⌘1–3 wiederkommt.
+    @State private var visitedTabs: Set<MainWindowModel.Tab> = []
 
     var body: some View {
         ZStack {
@@ -31,10 +36,11 @@ struct MainWindowView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            // Platz für die Ampel-Buttons (transparente Titlebar).
-            Spacer().frame(width: 66)
+            // Ganz links: Der Header liegt unterhalb der Titelleiste, die
+            // Ampel-Buttons brauchen hier keinen Platz.
+            backButton
 
-            Picker("Ansicht", selection: $model.tab) {
+            Picker("Ansicht", selection: tabSelection) {
                 Text("Board").tag(MainWindowModel.Tab.board)
                 Text("Issue").tag(MainWindowModel.Tab.issue)
                 Text("Review & Plan").tag(MainWindowModel.Tab.review)
@@ -81,20 +87,53 @@ struct MainWindowView: View {
         .background(.bar)
     }
 
+    /// Umschalter → Verlauf (jeder Tab-Wechsel ist ein Schritt zurück).
+    private var tabSelection: Binding<MainWindowModel.Tab> {
+        Binding(get: { model.tab }, set: { model.navigate(toTab: $0) })
+    }
+
+    // MARK: - Zurück
+
+    /// Sieht aus wie die Tab-Segmente, mit etwas Abstand davor abgesetzt.
+    private var backButton: some View {
+        BackSegmentButton(
+            entries: model.backStack.reversed().map { model.title(for: $0) },
+            help: backHelp
+        ) { steps, inNewWindow in
+            MainWindowController.shared.goBack(steps: steps, inNewWindow: inNewWindow)
+        }
+        .fixedSize()
+        .padding(.trailing, 8)
+    }
+
+    private var backHelp: String {
+        guard let target = model.backTarget() else { return "Zurück (⌘[)" }
+        return "Zurück zu \(model.title(for: target)) (⌘[) — gedrückt halten für den Verlauf, ⌘-Klick öffnet ein Issue im neuen Fenster"
+    }
+
     // MARK: - Inhalt
 
-    @ViewBuilder
     private var content: some View {
-        switch model.tab {
-        case .board:
-            // Greedy füllen, sonst zentriert der äußere VStack den Header mit.
-            BoardView(store: boardStore)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .issue:
-            issueContent
-        case .review:
-            ReviewView(store: reviewStore)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ZStack {
+            if model.tab == .board || visitedTabs.contains(.board) {
+                // Greedy füllen, sonst zentriert der äußere VStack den Header mit.
+                BoardView(store: boardStore)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .tabLayer(active: model.tab == .board)
+            }
+            if model.tab == .review || visitedTabs.contains(.review) {
+                ReviewView(store: reviewStore)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .tabLayer(active: model.tab == .review)
+            }
+            // Bewusst nicht am Leben gehalten: ein versteckter Editor würde
+            // sonst Tastatureingaben schlucken.
+            if model.tab == .issue {
+                issueContent
+            }
+        }
+        .onChange(of: model.tab, initial: true) { _, tab in
+            visitedTabs.insert(tab)
         }
     }
 
@@ -123,5 +162,15 @@ struct MainWindowView: View {
                 .frame(width: 320)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private extension View {
+    /// Ebene im Tab-Stapel: unsichtbar und nicht bedienbar, solange inaktiv —
+    /// bleibt aber im View-Baum (Scrollposition, Klappzustände).
+    func tabLayer(active: Bool) -> some View {
+        opacity(active ? 1 : 0)
+            .allowsHitTesting(active)
+            .accessibilityHidden(!active)
     }
 }

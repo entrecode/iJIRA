@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Einzelfenster-Variante der Issue-Detail-Ansicht (⌥-Klick):
+/// Einzelfenster-Variante der Issue-Detail-Ansicht (⌘-/⌥-Klick):
 /// eigener Header mit Suche, darunter der einbettbare Content.
 struct IssueDetailWindowView: View {
     @Bindable var model: IssueDetailModel
@@ -226,9 +226,8 @@ private struct IssueWindowHeader: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // Platz für die Ampel-Buttons (transparente Titlebar).
-            Spacer().frame(width: 66)
-
+            // Ganz links: Der Header liegt unterhalb der Titelleiste, die
+            // Ampel-Buttons brauchen hier keinen Platz.
             IssueKeyChip(key: model.issueKey, webURL: model.webURL)
 
             if let status = model.detail?.fields.status {

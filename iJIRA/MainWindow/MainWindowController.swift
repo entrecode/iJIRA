@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Besitzt das eine Hauptfenster (Board ⇄ Issue). Das Fenster wird beim
+/// Besitzt das eine Hauptfenster (Board ⇄ Issue ⇄ Review). Das Fenster wird beim
 /// Schließen nur ausgeblendet und lebt weiter — Wieder-Öffnen ist sofort da.
 @MainActor
 final class MainWindowController: NSObject, NSWindowDelegate {
@@ -15,6 +15,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     let boardStore: BoardStore
     let reviewStore: ReviewStore
     private var window: NSWindow?
+    private var mouseMonitor: Any?
 
     /// Vor dem Anzeigen aufgerufen (z. B. Menüleisten-Popover schließen).
     var onWillShow: (() -> Void)?
@@ -35,17 +36,64 @@ final class MainWindowController: NSObject, NSWindowDelegate {
 
     func showBoard() {
         show()
-        model.tab = .board
+        model.navigate(toTab: .board)
     }
 
     func showIssueTab() {
         show()
-        model.tab = .issue
+        model.navigate(toTab: .issue)
     }
 
     func showReviewTab() {
         show()
-        model.tab = .review
+        model.navigate(toTab: .review)
+    }
+
+    // MARK: - Verlauf
+
+    /// Zurück (Button, Verlaufsmenü, ⌘[, Maustaste). Mit `inNewWindow` und
+    /// einem Issue als Ziel öffnet es als Einzelfenster und das Hauptfenster
+    /// bleibt stehen — wie ⌘-Klick auf Zurück im Browser. Board und Review
+    /// gibt es nur im Hauptfenster, dort wird daraus ein normales Zurück.
+    func goBack(steps: Int = 1, inNewWindow: Bool = false) {
+        if inNewWindow, case .issue(let key?) = model.backTarget(steps: steps) {
+            IssueWindowManager.shared.open(issueKey: key, preferWindow: true)
+            return
+        }
+        model.goBack(steps: steps)
+    }
+
+    func goForward() {
+        model.goForward()
+    }
+
+    /// ⌘[ / ⌘] nur im Hauptfenster — und nicht, solange in einem Editor
+    /// Text steht: der Entwurf (Beschreibung, Titel …) wäre sonst weg.
+    func canNavigateHistory(forward: Bool) -> Bool {
+        guard let window, window.isKeyWindow else { return false }
+        if let editor = window.firstResponder as? NSTextView,
+           editor.isEditable, !editor.string.isEmpty {
+            return false
+        }
+        return forward ? model.canGoForward : model.canGoBack
+    }
+
+    /// Maus-Seitentasten (Taste 4 = zurück, 5 = vorwärts) im Hauptfenster.
+    private func installMouseNavigationMonitor() {
+        guard mouseMonitor == nil else { return }
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .otherMouseDown) { [weak self] event in
+            guard let self, let window = self.window, event.window === window else { return event }
+            switch event.buttonNumber {
+            case 3:
+                self.goBack(inNewWindow: event.modifierFlags.contains(.command))
+                return nil
+            case 4:
+                self.goForward()
+                return nil
+            default:
+                return event
+            }
+        }
     }
 
     func showIssue(key: String) {
@@ -97,6 +145,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.center()
         window.setFrameAutosaveName("MainWindow")
         window.delegate = self
+        installMouseNavigationMonitor()
         return window
     }
 }

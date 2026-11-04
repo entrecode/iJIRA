@@ -152,6 +152,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         MainWindowController.shared.showReviewTab()
     }
 
+    @objc func goBack(_ sender: Any?) {
+        MainWindowController.shared.goBack()
+    }
+
+    @objc func goForward(_ sender: Any?) {
+        MainWindowController.shared.goForward()
+    }
+
     @objc func refreshCurrentTab(_ sender: Any?) {
         MainWindowController.shared.refreshCurrentTab()
     }
@@ -173,11 +181,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             ?? MainWindowController.shared.issueKey(for: window)
     }
 
-    /// Nur „Link kopieren" ist kontextabhängig — die übrigen Menü-Actions des
-    /// Delegates stehen immer zur Verfügung.
+    /// „Link kopieren" und Zurück/Vorwärts sind kontextabhängig — die übrigen
+    /// Menü-Actions des Delegates stehen immer zur Verfügung.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        guard menuItem.action == #selector(copyIssueLink(_:)) else { return true }
-        return frontmostIssueKey() != nil
+        switch menuItem.action {
+        case #selector(copyIssueLink(_:)):
+            return frontmostIssueKey() != nil
+        case #selector(goBack(_:)):
+            return MainWindowController.shared.canNavigateHistory(forward: false)
+        case #selector(goForward(_:)):
+            return MainWindowController.shared.canNavigateHistory(forward: true)
+        default:
+            return true
+        }
     }
 
     /// Deep-Links: ijira://issue/ONE-1234 öffnet das Issue-Fenster.

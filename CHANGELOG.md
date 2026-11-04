@@ -9,6 +9,8 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 
 ## [Unreleased]
 
+## [1.4.0] – 2026-11-04
+
 ### Neu
 
 - **Zurück-Button:** Ganz links in der Kopfzeile des Hauptfensters geht es zur
@@ -290,7 +292,8 @@ Erstes Release: Menüleisten-App mit JIRA-Notifications als Messenger-artige
 Timeline, Antworten mit Markdown-Support (`code`, Code-Blöcke, **fett**,
 *kursiv*) und echten macOS-Push-Benachrichtigungen.
 
-[Unreleased]: https://github.com/entrecode/iJIRA/compare/1.3.0...HEAD
+[Unreleased]: https://github.com/entrecode/iJIRA/compare/1.4.0...HEAD
+[1.4.0]: https://github.com/entrecode/iJIRA/compare/1.3.0...1.4.0
 [1.3.0]: https://github.com/entrecode/iJIRA/compare/1.2.0...1.3.0
 [1.2.0]: https://github.com/entrecode/iJIRA/compare/1.1.1...1.2.0
 [1.1.1]: https://github.com/entrecode/iJIRA/compare/1.1.0...1.1.1

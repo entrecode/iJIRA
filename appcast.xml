@@ -3,6 +3,44 @@
     <channel>
         <title>iJIRA</title>
         <item>
+            <title>1.4.0</title>
+            <pubDate>Wed, 04 Nov 2026 11:58:33 +0100</pubDate>
+            <link>https://github.com/entrecode/iJIRA</link>
+            <sparkle:version>71</sparkle:version>
+            <sparkle:shortVersionString>1.4.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[
+### Neu
+
+- **Zurück-Button:** Ganz links in der Kopfzeile des Hauptfensters geht es zur
+  vorherigen Ansicht zurück, auch über mehrere Schritte, z. B. vom verlinkten
+  Issue zurück zum vorherigen Issue und weiter zu Review & Plan. Gedrückt
+  halten zeigt den Verlauf zum direkten Springen. Dazu ⌘[ / ⌘] (Menü
+  „Ansicht“) und die Seitentasten der Maus.
+- **Board und Review & Plan merken sich die Scrollposition:** Beim
+  Zurückkehren, egal ob per Zurück, Umschalter oder ⌘1–3, steht alles wie
+  verlassen. In Review & Plan bleiben auch auf- und zugeklappte Themen erhalten.
+- **⌘-Klick öffnet ein neues Fenster:** Auf Issue-Links, Karten und Zeilen
+  öffnet ⌘-Klick (wie bisher ⌥-Klick) das Issue als Einzelfenster. ⌘-Klick auf
+  Zurück öffnet das vorherige Issue im neuen Fenster.
+- **Testplan in der Issue-Ansicht:** Ist das Testplan-Feld gefüllt, erscheint
+  es als eigene Karte unter der Beschreibung und lässt sich wie die
+  Beschreibung bearbeiten. Ist es leer, lässt es sich über „+ Testplan“ anlegen.
+- **Kommentar-Entwürfe bleiben erhalten:** Ein angefangener Kommentar ist nach
+  dem Verlassen des Issues weiterhin da, solange die App läuft, auch zwischen
+  Menüleiste und Hauptfenster.
+
+### Geändert
+
+- **Aufgeräumte Kopfzeile:** Die leere Fläche links in der Kopfzeile von
+  Hauptfenster und Issue-Fenstern ist weg; Zurück-Button bzw. Issue-Key stehen
+  jetzt ganz links.
+
+]]></description>
+            <enclosure url="https://github.com/entrecode/iJIRA/releases/download/1.4.0/iJIRA-1.4.0.zip" length="3837630" type="application/octet-stream" sparkle:edSignature="TOGHtfwPgAl8HINvBM9N4AJBWZRvWGi9NZQ7t2XWMgAfKPyVGT1gjeUTPoaUvyGFKOBUcMUN1BIsQ2f4KnlXDw=="/>
+        </item>
+        <item>
             <title>1.3.0</title>
             <pubDate>Tue, 13 Oct 2026 09:33:52 +0200</pubDate>
             <link>https://github.com/entrecode/iJIRA</link>
@@ -73,25 +111,6 @@
 
 ]]></description>
             <enclosure url="https://github.com/entrecode/iJIRA/releases/download/1.2.0/iJIRA-1.2.0.zip" length="3724671" type="application/octet-stream" sparkle:edSignature="Waa0qJ3GYQ1VfAYvOo2f1Oi4fNvpBBNL+lE39SgfotZ3GkVUxYs2ipbGWXlh47MK4+4yN4WHo+fAiCzNzLymAA=="/>
-        </item>
-        <item>
-            <title>1.1.1</title>
-            <pubDate>Fri, 14 Aug 2026 16:18:29 +0200</pubDate>
-            <link>https://github.com/entrecode/iJIRA</link>
-            <sparkle:version>59</sparkle:version>
-            <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[
-### Behoben
-
-- **Components im „Neues Issue"-Dialog abwählbar:** Im Components-Dropdown des
-  Anlegen-Dialogs ließen sich einmal gewählte Komponenten nicht wieder
-  abwählen — nur neue hinzufügen. Die Einträge sind jetzt native abhakbare
-  Menüpunkte, An- und Abwählen funktioniert in beide Richtungen.
-
-]]></description>
-            <enclosure url="https://github.com/entrecode/iJIRA/releases/download/1.1.1/iJIRA-1.1.1.zip" length="3661804" type="application/octet-stream" sparkle:edSignature="r8KjisARNQe9KyFeDTkaOqdbdPi6w4OAd62e0KBllmMz+RrCg+YUgfG56EwQhAA7DF3gjZQGqkuDRFgGCYLJCA=="/>
         </item>
     </channel>
 </rss>

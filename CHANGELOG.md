@@ -25,6 +25,9 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 - **Testplan in der Issue-Ansicht:** Ist das Testplan-Feld gefüllt, erscheint
   es als eigene Karte unter der Beschreibung und lässt sich wie die
   Beschreibung bearbeiten. Ist es leer, lässt es sich über „+ Testplan“ anlegen.
+- **Kommentar-Entwürfe bleiben erhalten:** Ein angefangener Kommentar ist nach
+  dem Verlassen des Issues weiterhin da, solange die App läuft, auch zwischen
+  Menüleiste und Hauptfenster.
 
 ### Geändert
 

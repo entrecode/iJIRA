@@ -1323,7 +1323,17 @@ private struct AddLinkButton: View {
 struct IssueCommentsSection: View {
     @Bindable var model: IssueDetailModel
 
-    @State private var draft = ""
+    /// Entwurf liegt session-weit pro Issue (überlebt das Verlassen des Issues).
+    private var draft: String {
+        get { CommentDrafts.shared[model.issueKey] }
+        nonmutating set { CommentDrafts.shared[model.issueKey] = newValue }
+    }
+    private var draftBinding: Binding<String> {
+        let key = model.issueKey
+        return Binding(get: { CommentDrafts.shared[key] },
+                       set: { CommentDrafts.shared[key] = $0 })
+    }
+
     @State private var isSending = false
     @State private var mentionQuery: String?
     @State private var editorController = MarkdownEditorController()
@@ -1350,7 +1360,7 @@ struct IssueCommentsSection: View {
         VStack(alignment: .leading, spacing: 6) {
             Divider()
             ZStack(alignment: .topLeading) {
-                MarkdownTextEditor(text: $draft,
+                MarkdownTextEditor(text: draftBinding,
                                    controller: editorController,
                                    onMentionQuery: { mentionQuery = $0 },
                                    onFileDrop: { urls in Task { await uploadDrop(urls) } })

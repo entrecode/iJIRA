@@ -45,11 +45,11 @@ struct ConversationView: View {
             // Entwurf wiederherstellen (Popover-Inhalt wird bei jedem Öffnen
             // neu aufgebaut — Getipptes darf dabei nicht verloren gehen).
             if replyText.isEmpty {
-                replyText = CommentDrafts.draft(for: issueKey)
+                replyText = CommentDrafts.shared[issueKey]
             }
         }
         .onChange(of: replyText) { _, newValue in
-            CommentDrafts.set(newValue, for: issueKey)
+            CommentDrafts.shared[issueKey] = newValue
         }
     }
 
@@ -277,22 +277,11 @@ struct ConversationView: View {
             )
             store.insertIfNew(notification)
             replyText = ""
-            CommentDrafts.clear(for: issueKey)
+            CommentDrafts.shared[issueKey] = ""
         } catch {
             sendError = (error as? JiraError)?.userMessage ?? "Senden fehlgeschlagen."
         }
     }
-}
-
-/// Kommentar-Entwürfe je Issue (in-memory) — überleben das Schließen des
-/// Popovers und den Neuaufbau seiner View-Hierarchie.
-@MainActor
-enum CommentDrafts {
-    private static var drafts: [String: String] = [:]
-
-    static func draft(for issueKey: String) -> String { drafts[issueKey] ?? "" }
-    static func set(_ text: String, for issueKey: String) { drafts[issueKey] = text }
-    static func clear(for issueKey: String) { drafts[issueKey] = nil }
 }
 
 // MARK: - Message bubble

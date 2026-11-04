@@ -72,7 +72,7 @@ final class CreateIssueService {
             projects = (try? await client.visibleProjects()) ?? []
         }
         if teamFieldId == nil || sprintFieldId == nil {
-            let fields = (try? await client.allFields()) ?? []
+            let fields = await JiraFieldCatalog.shared.allFields(client: client)
             // Das Atlassian-Team-Feld ist ein Custom Field (Typ "team" bzw.
             // rm-teams-…); Fallback: Feld, das schlicht "Team" heißt.
             let teamField = fields.first {

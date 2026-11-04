@@ -22,6 +22,9 @@ Neue Änderungen kommen unter **Unreleased**; beim Release verschiebt
 - **⌘-Klick öffnet ein neues Fenster:** Auf Issue-Links, Karten und Zeilen
   öffnet ⌘-Klick (wie bisher ⌥-Klick) das Issue als Einzelfenster. ⌘-Klick auf
   Zurück öffnet das vorherige Issue im neuen Fenster.
+- **Testplan in der Issue-Ansicht:** Ist das Testplan-Feld gefüllt, erscheint
+  es als eigene Karte unter der Beschreibung und lässt sich wie die
+  Beschreibung bearbeiten. Ist es leer, lässt es sich über „+ Testplan“ anlegen.
 
 ### Geändert
 

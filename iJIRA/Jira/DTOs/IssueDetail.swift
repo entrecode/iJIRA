@@ -8,6 +8,38 @@ struct IssueDetailDTO: Decodable, Sendable {
     let id: String
     let key: String
     let fields: IssueDetailFields
+    /// Mitangefragte Rich-Text-Custom-Fields (Feld-ID → ADF-Dokument), z. B.
+    /// der Testplan. Leere Felder fehlen.
+    let richTextFields: [String: ADFNode]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, key, fields
+    }
+
+    private struct FieldKey: CodingKey {
+        let stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        key = try container.decode(String.self, forKey: .key)
+        fields = try container.decode(IssueDetailFields.self, forKey: .fields)
+        // Custom Fields haben site-spezifische IDs — daher dynamisch: alles
+        // unter `customfield_*`, das ein ADF-Dokument ist.
+        let raw = try container.nestedContainer(keyedBy: FieldKey.self, forKey: .fields)
+        var richText: [String: ADFNode] = [:]
+        for fieldKey in raw.allKeys where fieldKey.stringValue.hasPrefix("customfield_") {
+            if let node = try? raw.decodeIfPresent(ADFNode.self, forKey: fieldKey),
+               node.type == "doc" {
+                richText[fieldKey.stringValue] = node
+            }
+        }
+        richTextFields = richText
+    }
 }
 
 struct IssueDetailFields: Decodable, Sendable {

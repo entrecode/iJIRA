@@ -30,6 +30,10 @@ final class IssueDetailModel {
     private(set) var archiveStatus: IssueArchiveStatus?
     private(set) var isRestoring = false
 
+    /// Testplan-/Testanweisungs-Feld der Site (nil = gibt es nicht). Titel
+    /// der Karte ist der Jira-Feldname.
+    private(set) var testPlanField: FieldDTO?
+
     /// Mögliche Workflow-Übergänge — fürs Status-Dropdown im Header.
     private(set) var availableTransitions: [TransitionDTO] = []
 
@@ -84,6 +88,12 @@ final class IssueDetailModel {
     var webURL: URL? { URL(string: appState.issueWebURL(issueKey)) }
     var isArchived: Bool { archiveStatus?.isArchived == true }
 
+    /// Inhalt des Testplan-Felds — nil, wenn leer oder auf der Site nicht vorhanden.
+    var testPlan: ADFNode? {
+        guard let id = testPlanField?.id else { return nil }
+        return detail?.richTextFields[id]
+    }
+
     private static let archivedMessage = "Das Issue ist archiviert – erst aus dem Archiv holen."
 
     /// Deeplink auf genau diesen Kommentar — Jira springt beim Öffnen dorthin
@@ -101,8 +111,11 @@ final class IssueDetailModel {
         }
         isLoading = true
         defer { isLoading = false }
+        // Feld-ID ist site-spezifisch; der Katalog ist nach dem Connect
+        // meist schon geladen (sonst einmalig ein Request).
+        testPlanField = await JiraFieldCatalog.shared.testPlanField(client: client)
         do {
-            async let detailTask = client.issueDetail(key: issueKey)
+            async let detailTask = fetchDetail(client)
             async let commentsTask = client.allComments(issueKey: issueKey)
             // Kinder sind ein Nice-to-have: ein Fehler hier darf das Issue
             // nicht am Laden hindern.
@@ -141,7 +154,7 @@ final class IssueDetailModel {
     func refresh() async {
         guard let client else { return }
         do {
-            detail = try await client.issueDetail(key: issueKey)
+            detail = try await fetchDetail(client)
             comments = (try? await client.allComments(issueKey: issueKey)) ?? comments
             children = (try? await client.childIssues(parentKey: issueKey)) ?? children
             archiveStatus = (try? await client.archiveStatus(issueKey: issueKey)) ?? archiveStatus
@@ -150,6 +163,11 @@ final class IssueDetailModel {
         } catch {
             actionError = (error as? JiraError)?.userMessage ?? error.localizedDescription
         }
+    }
+
+    private func fetchDetail(_ client: JiraClient) async throws -> IssueDetailDTO {
+        try await client.issueDetail(key: issueKey,
+                                     richTextFieldIds: [testPlanField?.id].compactMap { $0 })
     }
 
     /// Statuswechsel direkt aus der Detailview (Dropdown am Status-Badge).
@@ -200,25 +218,44 @@ final class IssueDetailModel {
         }
     }
 
-    /// Beschreibung als editierbares Markdown (plus die Blöcke, die Markdown
-    /// nicht abbilden kann — sie werden beim Speichern wieder angehängt).
-    func descriptionConversion() -> ADFMarkdownConversion {
-        guard let description = detail?.fields.description else {
+    /// Rich-Text (Beschreibung, Testplan) als editierbares Markdown — plus
+    /// die Blöcke, die Markdown nicht abbilden kann; sie werden beim
+    /// Speichern wieder angehängt.
+    func markdownConversion(of document: ADFNode?) -> ADFMarkdownConversion {
+        guard let document else {
             return ADFMarkdownConversion(markdown: "", preservedNodes: [])
         }
-        return adfToMarkdown(description, siteBase: siteBaseURL)
+        return adfToMarkdown(document, siteBase: siteBaseURL)
     }
 
     func saveDescription(markdown: String, preservedNodes: [[String: Any]]) async -> Bool {
+        let doc = adfDocument(markdown: markdown, preservedNodes: preservedNodes)
+        return await performEdit { client in
+            try await client.editIssue(key: self.issueKey, fields: ["description": doc])
+        }
+    }
+
+    /// Testplan speichern; leer → Feld leeren (die Karte verschwindet dann).
+    func saveTestPlan(markdown: String, preservedNodes: [[String: Any]]) async -> Bool {
+        guard let fieldId = testPlanField?.id else { return false }
+        let isEmpty = markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && preservedNodes.isEmpty
+        let value: Any = isEmpty
+            ? NSNull()
+            : adfDocument(markdown: markdown, preservedNodes: preservedNodes)
+        return await performEdit { client in
+            try await client.editIssue(key: self.issueKey, fields: [fieldId: value])
+        }
+    }
+
+    private func adfDocument(markdown: String, preservedNodes: [[String: Any]]) -> [String: Any] {
         var doc = markdownToADFDoc(markdown, siteBaseURL: siteBaseURL)
         if !preservedNodes.isEmpty {
             var content = doc["content"] as? [[String: Any]] ?? []
             content += preservedNodes
             doc["content"] = content
         }
-        return await performEdit { client in
-            try await client.editIssue(key: self.issueKey, fields: ["description": doc])
-        }
+        return doc
     }
 
     func loadLinkTypes() async {

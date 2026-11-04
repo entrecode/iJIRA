@@ -884,11 +884,78 @@ struct IssueSuggestionPicker: View {
     }
 }
 
-// MARK: - Beschreibung (editierbar)
+// MARK: - Beschreibung & Testplan (editierbar)
 
+/// Beschreibung — mit „+ Testplan" daneben, solange das Testplan-Feld leer ist.
 struct IssueDescriptionSection: View {
     @Bindable var model: IssueDetailModel
     let detail: IssueDetailDTO
+    /// „+ Testplan" gedrückt: Testplan-Karte direkt im Editor öffnen.
+    var onAddTestPlan: (() -> Void)? = nil
+
+    var body: some View {
+        IssueRichTextSection(
+            model: model,
+            title: "Beschreibung",
+            systemImage: "text.alignleft",
+            document: detail.fields.description,
+            emptyText: "Keine Beschreibung",
+            save: { markdown, preserved in
+                await model.saveDescription(markdown: markdown, preservedNodes: preserved)
+            }
+        ) {
+            if let onAddTestPlan, let field = model.testPlanField {
+                Button(action: onAddTestPlan) {
+                    Label(field.name ?? "Testplan", systemImage: "plus")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .disabled(model.isArchived)
+                .help("\(field.name ?? "Testplan") hinzufügen")
+            }
+        }
+    }
+}
+
+/// Testplan-/Testanweisungs-Feld als eigene Karte; Titel = Jira-Feldname.
+struct IssueTestPlanSection: View {
+    @Bindable var model: IssueDetailModel
+    /// Über „+ Testplan" geöffnet → gleich im Editor starten.
+    var startsEditing = false
+    var onEditingEnded: (() -> Void)? = nil
+
+    var body: some View {
+        IssueRichTextSection(
+            model: model,
+            title: model.testPlanField?.name ?? "Testplan",
+            systemImage: "checklist",
+            document: model.testPlan,
+            emptyText: "Kein Testplan",
+            startsEditing: startsEditing,
+            onEditingEnded: onEditingEnded,
+            save: { markdown, preserved in
+                await model.saveTestPlan(markdown: markdown, preservedNodes: preserved)
+            }
+        ) {
+            EmptyView()
+        }
+    }
+}
+
+/// Karte für ein Rich-Text-Feld (ADF): Anzeige mit Bildern/Anhängen, Bearbeiten
+/// als Markdown mit Mentions. Was Markdown nicht abbilden kann, bleibt
+/// erhalten und rückt beim Speichern ans Ende.
+struct IssueRichTextSection<Accessory: View>: View {
+    @Bindable var model: IssueDetailModel
+    let title: String
+    let systemImage: String
+    let document: ADFNode?
+    let emptyText: String
+    var startsEditing = false
+    var onEditingEnded: (() -> Void)? = nil
+    let save: (String, [[String: Any]]) async -> Bool
+    /// Zusätzliche Knöpfe neben „Bearbeiten".
+    @ViewBuilder var accessory: Accessory
 
     @State private var isEditing = false
     @State private var draft = ""
@@ -899,37 +966,43 @@ struct IssueDescriptionSection: View {
     @State private var editorController = MarkdownEditorController()
 
     var body: some View {
-        SectionCard(title: "Beschreibung", systemImage: "text.alignleft") {
+        SectionCard(title: title, systemImage: systemImage) {
             if isEditing {
                 editor
             } else {
                 display
             }
         }
+        .onAppear {
+            if startsEditing, !isEditing { startEditing() }
+        }
     }
 
     @ViewBuilder
     private var display: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let description = detail.fields.description {
+            if let document {
                 ADFContentView(
-                    document: description,
+                    document: document,
                     resolveAttachment: { model.attachment(forMediaAlt: $0) },
                     thumbnail: { model.thumbnail(for: $0) },
                     onOpenAttachment: { model.openAttachment($0) })
             } else {
-                Text("Keine Beschreibung")
+                Text(emptyText)
                     .font(.callout)
                     .foregroundStyle(.tertiary)
             }
-            Button {
-                startEditing()
-            } label: {
-                Label("Bearbeiten", systemImage: "pencil")
-                    .font(.caption)
+            HStack(spacing: 12) {
+                Button {
+                    startEditing()
+                } label: {
+                    Label("Bearbeiten", systemImage: "pencil")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .disabled(model.isArchived)
+                accessory
             }
-            .buttonStyle(.borderless)
-            .disabled(model.isArchived)
         }
     }
 
@@ -957,12 +1030,12 @@ struct IssueDescriptionSection: View {
                     .foregroundStyle(.quaternary)
                     .lineLimit(1)
                 Spacer()
-                Button("Abbrechen") { isEditing = false }
+                Button("Abbrechen") { endEditing() }
                     .controlSize(.small)
                 if isSaving {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button("Sichern") { Task { await save() } }
+                    Button("Sichern") { Task { await commit() } }
                         .controlSize(.small)
                         .keyboardShortcut(.return, modifiers: .command)
                 }
@@ -971,18 +1044,23 @@ struct IssueDescriptionSection: View {
     }
 
     private func startEditing() {
-        let conversion = model.descriptionConversion()
+        let conversion = model.markdownConversion(of: document)
         draft = conversion.markdown
         preservedNodes = conversion.preservedNodes
         preservedSummary = conversion.preservedSummary
         isEditing = true
     }
 
-    private func save() async {
+    private func endEditing() {
+        isEditing = false
+        onEditingEnded?()
+    }
+
+    private func commit() async {
         isSaving = true
         defer { isSaving = false }
-        if await model.saveDescription(markdown: draft, preservedNodes: preservedNodes) {
-            isEditing = false
+        if await save(draft, preservedNodes) {
+            endEditing()
         }
     }
 }

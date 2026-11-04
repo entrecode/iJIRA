@@ -31,6 +31,8 @@ struct IssueDetailContent: View {
     var showsIdentityRow = true
 
     @State private var dropTargeted = false
+    /// „+ Testplan" gedrückt — Karte zeigen, obwohl das Feld noch leer ist.
+    @State private var addingTestPlan = false
 
     var body: some View {
         content
@@ -72,7 +74,15 @@ struct IssueDetailContent: View {
                     }
                     IssueTitleSection(model: model, detail: detail)
                     IssueMetaSection(model: model, detail: detail)
-                    IssueDescriptionSection(model: model, detail: detail)
+                    IssueDescriptionSection(
+                        model: model, detail: detail,
+                        onAddTestPlan: model.testPlan == nil && !addingTestPlan
+                            ? { addingTestPlan = true } : nil)
+                    if model.testPlan != nil || addingTestPlan {
+                        IssueTestPlanSection(model: model,
+                                             startsEditing: addingTestPlan,
+                                             onEditingEnded: { addingTestPlan = false })
+                    }
                     if !model.attachments.isEmpty {
                         IssueAttachmentsSection(model: model)
                     }

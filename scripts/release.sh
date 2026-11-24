@@ -51,7 +51,6 @@ echo "Release-Notes (aus CHANGELOG.md, Unreleased):"
 echo "$UNRELEASED"
 echo
 
-# Deployte Konvention: Zeitzone immer explizit (Europe/Berlin).
 TODAY="$(TZ=Europe/Berlin date +%F)"
 
 # Unreleased → Versions-Abschnitt, frische Unreleased-Sektion darüber,
